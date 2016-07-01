@@ -1,0 +1,18 @@
+processing:
+  build: .
+  environment:
+   NODE_ENV: development
+   PROCESS_WATCH: 'no'
+   PROCESS_DATA_DIR: '/data'
+   PROCESS_RETRY: 3
+   PROCESS_WORKERS: 1
+   PROCESS_CONCURRENCY: 3
+  volumes:
+   - /tmp/hwdata:/data
+   - ./app:/app
+   - /app/node_modules
+  links:
+   - redis
+
+redis:
+  image: redis:3.0

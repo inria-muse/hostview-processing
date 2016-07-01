@@ -1,0 +1,24 @@
+{
+  "name": "hostview_processing",
+  "private": true,
+  "version": "0.0.1",
+  "description": "Process raw data file uploads from Hostview clients.",
+  "keywords": [],
+  "dependencies": {
+    "fs-extra": "~0.30.0",
+    "kue": "~0.11.1",
+    "watch": "~0.19.1"
+  },
+  "devDependencies": {
+    "mocha": "~2.5.3",
+    "chai" : "~3.5.0" 
+  },
+  "scripts": {
+    "debug": "node debug app.js",
+    "start": "node app.js",
+    "test": "node ./node_modules/mocha/bin/mocha test/bootstrap.js test/*.test.js"
+  },
+  "main": "app.js",
+  "author": "Anna-Kaisa Pietilainen<anna-kaisa.pietilainen@inria.fr>",
+  "license": "MIT"
+}
