@@ -44,7 +44,9 @@ var kue = require('kue')
     retry: getint(process.env.PROCESS_RETRY,3),               // number of retries
     workers: getint(process.env.PROCESS_WORKERS,1),           // num worker threads
     concurrency: getint(process.env.PROCESS_CONCURRENCY,5),   // num jobs / worker
-    redis: process.env.REDIS_PORT || undefined                // redis URL (or use default)
+    redis: (process.env.REDIS_PORT ? 
+            'redis://' + process.env.REDIS_PORT_6379_TCP_ADDR + ':' + process.env.REDIS_PORT_6379_TCP_PORT 
+            : undefined)                // redis URL (or use default)
   }
 
   // Ensure we're in the project directory, so relative paths work as expected

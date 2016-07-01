@@ -8,7 +8,7 @@ processing:
    PROCESS_WORKERS: 1
    PROCESS_CONCURRENCY: 3
   volumes:
-   - /tmp/hwdata:/data
+   - ./data:/data
    - ./app:/app
    - /app/node_modules
   links:
