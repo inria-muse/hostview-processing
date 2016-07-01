@@ -7,12 +7,12 @@ Hostview Processing contains the data processing scripts that store the raw file
 * a free worker process picks up the processing task from the queue and records the data to the db
 * the worker notifies the master process of the success/failure of the task processing
 * on failure, the master will requeue (up to number of times) the task
-* on success, the file is moved to the permanent storage location and marked as handled in the database
+* on success, the file is moved to the permanent storage location
 * on repeated failures, the file is moved to a separate failed files folder for manual inspection
 
-This workflow is implemented as a node.js cluster.
+This workflow is implemented with a node.js cluster and a Redis backed job queue.
 
-The app can be also run without file watcher to batch process a set of files. In this case it will just process the files in the configured incoming folder, parse and store all data to the database, and exit.
+The app can be also run without file watcher to batch process a set of files. In this case it will just process the files in the configured folder, parse and store all data to the database, and exit.
 
 The app depends on Redis (job queue) and Postgresql database (to store the data). 
 
