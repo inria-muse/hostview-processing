@@ -2,13 +2,13 @@
 
 Hostview Processing contains the data processing scripts that store the raw files (sqlite dbs and pcaps) from Hostview clients (received with hostview-upload) to the backend database. The basic workflow is as follows:
 
-    * a master process is watching new files in an incoming folder
-    * when a new file is received, a processing task is queued on the task queue
-    * a free worker process picks up the processing task from the queue and records the data to the db
-    * the worker notifies the master process of the success/failure of the task processing
-    * on failure, the master will requeue (up to number of times) the task
-    * on success, the file is moved to the permanent storage location and marked as handled in the database
-    * on repeated failures, the file is moved to a separate failed files folder for manual inspection
+* a master process is watching new files in an incoming folder
+* when a new file is received, a processing task is queued on the task queue
+* a free worker process picks up the processing task from the queue and records the data to the db
+* the worker notifies the master process of the success/failure of the task processing
+* on failure, the master will requeue (up to number of times) the task
+* on success, the file is moved to the permanent storage location and marked as handled in the database
+* on repeated failures, the file is moved to a separate failed files folder for manual inspection
 
 This workflow is implemented as a node.js cluster.
 
