@@ -1,18 +1,44 @@
-processing:
-  build: .
-  environment:
-   NODE_ENV: development
-   PROCESS_WATCH: 'no'
-   PROCESS_DATA_DIR: '/data'
-   PROCESS_RETRY: 3
-   PROCESS_WORKERS: 1
-   PROCESS_CONCURRENCY: 3
-  volumes:
-   - ./data:/data
-   - ./app:/app
-   - /app/node_modules
-  links:
-   - redis
+version: '2'
 
-redis:
-  image: redis:3.0
+services:
+  processing:
+    build: .
+    image: hostview/processing
+    volumes:
+     - ./data:/data
+     - ./app:/app
+     - /app/node_modules
+    links:
+     - redis
+     - postgres
+    networks:
+      - back-tier
+    environment:
+     NODE_ENV: development
+     PROCESS_REDIS: redis://redis:6379
+     PROCESS_DB: postgres://hostview:h0stvi3w@postgres/hostview
+     PROCESS_WATCH: 'yes'
+     PROCESS_DATA_DIR: '/data'
+     PROCESS_RETRY: 3
+     PROCESS_WORKERS: 1
+     PROCESS_CONCURRENCY: 3
+
+  redis:
+    image: redis:3.0
+    networks:
+      - back-tier
+
+  postgres:
+    image: postgres:9.5
+    environment:
+     POSTGRES_USER: hostview     
+     POSTGRES_PASSWORD: h0stvi3w
+     POSTGRES_DB: hostview  
+    networks:
+      - back-tier
+    volumes:
+     - ./docker-entrypoint-initdb.d:/docker-entrypoint-initdb.d
+
+networks:
+  back-tier:
+    driver: bridge

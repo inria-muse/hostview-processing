@@ -5,11 +5,11 @@ describe('process_sqlite', function() {
 
     describe('#process()', function() {
         it('should return Error', function(done) {
-            process_sqlite.process('foo', function(err) {
+            process_sqlite.process('foo', undefined, function(err) {
                 assert.equal(err!=undefined, true);
                 done();
             });
         });
     });
-    
+
 });
