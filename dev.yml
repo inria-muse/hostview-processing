@@ -20,6 +20,7 @@ services:
      PROCESS_WATCH: 'yes'
      PROCESS_DATA_DIR: '/data'
      PROCESS_RETRY: 3
+     PROCESS_RETRY_DELAY: 1
      PROCESS_WORKERS: 1
      PROCESS_CONCURRENCY: 3
 

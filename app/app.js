@@ -37,19 +37,29 @@ var kue = require('kue')
     return defaultv;
   }
 
+  // hostview raw files
+  var getFileType = function(path) {
+    if (path.indexOf("_stats.db") > 0) return 'sqlite';
+    else if (path.indexOf("_last.pcap") > -1) return 'pcap';
+    else if (path.indexOf("_questionnaire.json") > -1) return 'survey';
+    else if (path.indexOf(".json") > -1) return 'json';
+    else return null;
+  };  
+
   // Global configuration
   var datadir = process.env.PROCESS_DATA_DIR||'/tmp';
   var config = {
-    incoming_dir: datadir+'/incoming',              // incoming files
-    processed_dir: datadir+'/processed',            // processed files
-    failed_dir: datadir+'/failed',                  // failed files
-    enable_watch: getbool('PROCESS_WATCH',false),   // monitor incoming files ?
-    retry: getint('PROCESS_RETRY',3),               // number of retries
-    workers: getint('PROCESS_WORKERS',1),           // num worker threads
-    concurrency: getint('PROCESS_CONCURRENCY',5),   // num jobs / worker
-    redis: process.env.PROCESS_REDIS||undefined,    // redis url (or use default)
-    db: process.env.PROCESS_DB||undefined           // postgresql url (or use default)
-  }
+    incoming_dir: datadir+'/incoming',                // incoming files
+    processed_dir: datadir+'/processed',              // processed files
+    failed_dir: datadir+'/failed',                    // failed files
+    enable_watch: getbool('PROCESS_WATCH',false),     // monitor incoming files ?
+    retry: getint('PROCESS_RETRY',3),                 // number of retries
+    retry_delay: getint('PROCESS_RETRY_DELAY',3600),  // delay between retries (s)
+    workers: getint('PROCESS_WORKERS',1),             // num worker threads
+    concurrency: getint('PROCESS_CONCURRENCY',5),     // num jobs / worker
+    redis: process.env.PROCESS_REDIS||undefined,      // redis url (or use default)
+    db: process.env.PROCESS_DB||undefined             // postgresql url (or use default)
+  };
 
   // Ensure we're in the project directory, so relative paths work as expected
   // no matter where we actually run from.
@@ -143,12 +153,22 @@ var kue = require('kue')
     });
 
     var enqueue = function(path) {
-      queue.create('incoming', { filename : path })
+      var task = { filename : path, filetype : getFileType(path) };
+
+      var prio = 'normal';
+      if (task.filetype == 'sqlite')
+        prio = 'critical'; // so that sessions get added asap
+      else if (task.filetype == 'pcap')
+        prio = 'low';
+
+      queue.create('incoming', task)
         .attempts(config.retry)
+        .backoff( {delay: config.retry_delay*1000, type:'fixed'} )
+        .priority(prio)
         .save(function(err) {
           if (err) console.error('Failed to create job', err);
         });
-    }
+    };
 
     // scan incoming for any non-processed files
     fs.walk(config.incoming_dir)
@@ -196,7 +216,7 @@ var kue = require('kue')
       var hv = p[p.length-4];
 
       // make sure the device is recorded in the db and get its id
-      db.getOrInsertDevice(device_id, function(err, res) {
+      db.getOrInsertDevice(device_id, function(err, dev) {
         if (err) return done(err);
 
         // add or update files table
@@ -204,7 +224,7 @@ var kue = require('kue')
           folder: path.dirname(job.data.filename),
           basename: path.basename(job.data.filename),
           status: 'processing',
-          device_id: res.id,
+          device_id: dev.id,
           hostview_version: hv 
         };
         db.insertOrUpdate(file, function(err, res) {
@@ -218,17 +238,19 @@ var kue = require('kue')
             } else {
               file.status = 'success';
             }
+
             db.insertOrUpdate(file, function(err2, res2) {
+              // note return the original processing error (if any) on purpose
               if (err) return done(err);
               done();
             });
-          };
+          }; // processdone
 
           try {
             // finally, process the file
-            if (job.data.filename.indexOf('.db')>0) {
+            if (job.data.filetype == 'sqlite') {
               process_sqlite.process(job.data.filename, db, processdone);
-            } else if (job.data.filename.indexOf('.pcap')>0) {
+            } else if (job.data.filetype == 'pcap') {
               process_pcap.process(job.data.filename, db, processdone);
             } else {
               processdone(new Error('Unknown file: ' + job.data.filename));
