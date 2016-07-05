@@ -1,0 +1,30 @@
+version: '2'
+
+services:
+  processing:
+    build: .
+    image: hostview/processing
+    volumes:
+     - /home/ucnstudy/hostview_data:/data
+    links:
+     - redis
+    networks:
+      - back-tier
+    environment:
+     NODE_ENV: production
+     PROCESS_REDIS: redis://redis:6379
+     PROCESS_DB:
+     PROCESS_WATCH: 'yes'
+     PROCESS_DATA_DIR: '/data'
+     PROCESS_RETRY: 3
+     PROCESS_WORKERS: 5
+     PROCESS_CONCURRENCY: 3
+
+  redis:
+    image: redis:3.0
+    networks:
+      - back-tier
+
+networks:
+  back-tier:
+    driver: bridge

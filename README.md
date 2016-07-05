@@ -43,11 +43,14 @@ To get a shell access to the app container (will not start the app) with data mo
 
 To run all the unit tests (in ./app/test), do:
 
-    docker run --rm -e NODE_ENV=development -e TEST=1 hostview/processing
+    $ docker ps -a // list available container
+    $ docker network ls // list networks
+    $ docker start <postgres:9.5 container id>
+    $ docker run --rm --net=<hostview_back-tier> --link <postgres:9.5 container name>:postgres -e NODE_ENV=development -e TEST=1 -e PROCESS_DB=postgres://hostview:h0stvi3w@postgres/hostview hostview/processing
 
 
 ### Production
 
 To run the app, use Docker Compose (will start Redis + App containers, host Postgresql):
 
-    docker-compose -f prod.yml up
+    PROCESS_DB=postgres://<user>:<password>@ucn.inria.fr/hostview docker-compose -f prod.yml -d up
