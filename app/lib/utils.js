@@ -16,7 +16,6 @@ var fs = require('fs-extra')
 module.exports.uncompress = function(src, dst, cb) {
     try {
         fs.ensureDirSync(dst);
-
         child_process.exec(
             "dtrx -q -n -f " + src,
             { cwd: dst },
@@ -24,8 +23,13 @@ module.exports.uncompress = function(src, dst, cb) {
                 if (err) return cb(error);
                 return cb(undefined, path.join[dst,path.basename(src)]);
             });
-
     } catch (err) {
         cb(err, undefined);
     }        
+}
+
+module.exports.datemax = function(a,b) {
+    if (!b) return a;
+    if (!a) return b;
+    return (a.getTime()>=b.getTime() ? a : b);
 }

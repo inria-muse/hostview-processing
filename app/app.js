@@ -178,11 +178,12 @@ var kue = require('kue')
       .on('end', function () {
         if (config.enable_watch) {
           console.log('Master start watcher ... ');
+
           // start a watcher for new incoming files - the monitor will keep the master process alive
           watch.createMonitor(config.incoming_dir, function(m) {
             monitor = m;
             monitor.on("created", function(path, stats) {
-              if (stats.isFile()) enqueue(path);
+              if (stats && stats.isFile()) enqueue(path);
             });
           });
 
@@ -205,15 +206,15 @@ var kue = require('kue')
 
       console.log('Worker handle %s', job.data.filename);
 
-      // [..., hostview_ver, device_id, year, month]
+      // [..., device_id, hostview_ver, year, month]
       var p = path.dirname(job.data.filename).split(path.sep);
       if (p.length < 5) {
         return done(new Error('Invalid filename: ' + job.data.filename));
       }
 
       // extract Hostview id and version from the filepath
-      var device_id = p[p.length-3];
-      var hv = p[p.length-4];
+      var device_id = p[p.length-4];
+      var hv = p[p.length-3];
 
       // make sure the device is recorded in the db and get its id
       db.getOrInsertDevice(device_id, function(err, dev) {
@@ -227,6 +228,7 @@ var kue = require('kue')
           device_id: dev.id,
           hostview_version: hv 
         };
+
         db.insertOrUpdate(file, function(err, res) {
           if (err) return done(err);
 
@@ -234,7 +236,7 @@ var kue = require('kue')
           var processdone = function(err, res) {
             if (err) {
               file.status = 'error';
-              file.error_info = err;        
+              file.error_info = err+"";
             } else {
               file.status = 'success';
             }
@@ -248,12 +250,14 @@ var kue = require('kue')
 
           try {
             // finally, process the file
+            file.path = job.data.filename;
+
             if (job.data.filetype == 'sqlite') {
-              process_sqlite.process(job.data.filename, db, processdone);
+              process_sqlite.process(file, db, processdone);
             } else if (job.data.filetype == 'pcap') {
-              process_pcap.process(job.data.filename, db, processdone);
+              process_pcap.process(file, db, processdone);
             } else {
-              processdone(new Error('Unknown file: ' + job.data.filename));
+              processdone(new Error('Unhandled filetype: ' + job.data.filetype));
             }
           } catch(err) {
             console.error('Unhandled worker error', err);   

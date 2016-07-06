@@ -3,12 +3,29 @@
  *
  * DB interface.
  */
-var pg = require('pg-bricks');
+var pgb = require('pg-bricks')
+    , async = require('async');
 
+/** Constructor */
 var DB = function(dburl) {
     this.dburl = dburl;
-    this.db = pg.configure(dburl);
-}
+    this.db = pgb.configure(dburl);
+};
+
+// note the caller func receives pg-bricks client
+DB.prototype.transaction =  function(func, cb) {
+    if (!this.db) 
+        return cb(new Error('No db connection [' + this.dburl + ']'));
+
+    this.db.transaction(function(client, callback) {
+        func(client, function () {
+            results = arguments;
+            callback.apply(null, arguments);
+        });
+    }, cb);
+};
+
+//--- highlevel funcs ---
 
 DB.prototype.insert = function(table, rowdata, cb) {
     if (!this.db) 
@@ -28,45 +45,72 @@ DB.prototype.select = function(table, filter, cb) {
     this.db.select('*').from(table).where(filter).rows(cb);     
 }
 
-
 DB.prototype.getOrInsertDevice = function(devid, cb) {
-    var that = this;
-    var dev = { device_id : devid };
-    that.select('devices', dev, function(err, rows) {
+    if (!this.db) 
+        return cb(new Error('No db connection [' + this.dburl + ']'));
+
+    this.db.transaction(function(client, callback) {
+        async.waterfall([
+            client.select('*').from('devices').where({ device_id : devid }).run,
+            function(res, callback) {
+                if (res.rows.length==0) {
+                    var dev = { device_id : devid };
+                    client.insert('devices', dev).returning('*').row(callback);
+                } else {
+                    var dev = res.rows[0];
+                    dev.existed = true;
+                    callback(undefined, dev);
+                }
+            }
+        ], callback);
+    }, function(err, res) {
+        // called upon transaction success/failure
         if (err) return cb(err);
-        if (rows && rows.length == 1) {
-            dev = rows[0];
-            dev.existed = true;
-            cb(undefined, dev);
-        } else {
-            that.insert('devices', dev, cb);
-        }
+        cb(undefined, res);           
     });
-}
+};
 
 DB.prototype.insertOrUpdateFile = function(file, cb) {
-    var that = this;
-    that.select('files', { 
+    if (!this.db) 
+        return cb(new Error('No db connection [' + this.dburl + ']'));
+
+    this.db.transaction(function(client, callback) {
+
+        var filter = { 
             device_id : file.device_id, 
             basename : file.basename
-        }, 
-        function(err,rows) {
-            if (err) return cb(err);
+        };
 
-            if (rows && rows.length == 1) {
-                that.update('files', {
-                    updated_at : that.db.sql('now()'),
-                    status : file.status
-                }, { id : rows[0].id }, function(err, res) {
-                    var f = rows[0];
-                    f.status = file.status;
-                    f.updated_at = new Date();
-                    cb(err, f);
-                });
-            } else {
-                that.insert('files', file, cb);
+        async.waterfall([
+            client.select('*').from('files').where(filter).run,
+            function(res, callback) {
+                if (res.rows.length==1) {
+                    var update = {
+                        updated_at : that.db.sql('now()'),
+                        status : file.status
+                    };
+                    var idfilter = { id : rows[0].id };
+                    client.update('files', update).where(idfilter).run(callback);
+                } else {
+                    client.insert('files', file).returning('*').row(callback);                    
+                }
+            },
+            function(res, callback) {
+                if (res) {
+                    // from insert
+                    callback(undefined, res);
+                } else {
+                    // from update
+                    file.updated_at = new Date();
+                    callback(undefined, file);
+                }
             }
-        });
+        ], callback);
+    }, function(err, res) {
+        // called upon transaction success/failure
+        if (err) return cb(err);
+        cb(undefined, res);           
+    });
 }
 
 /** The DB API. */

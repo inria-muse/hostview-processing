@@ -16,7 +16,7 @@ The app can be run without the file watcher to batch process a set of files. In 
 
 The app depends on Redis (job queue) and Postgresql database (to store the data).
 
-TODO: how to deal with (pcap) files that fail when the corresponding session has not been processed yet (the retries + delay can fix most cases, but it can still happen ...)
+TODO: how to deal with (pcap) files that fail when the corresponding session has not been processed yet (the retries + delay can fix most cases, but it can still happen ...) ?
 
 
 ## Deployment
@@ -45,9 +45,9 @@ To get a shell access to the app container (will not start the app) with data mo
 
 To run all the unit tests (in ./app/test), first make sure a postgres is running somewhere (e.g. in a container from above):
 
-    $ docker ps -a // list all containers
-    $ docker network ls // list networks
-    $ docker start <postgres:9.5 container id>
+    $ docker ps -a                               // list all containers
+    $ docker network ls                          // list networks
+    $ docker start <postgres:9.5 container id>   // start existing container
 
 Then run the processing app container with the test flag (make sure to link to the postgres container or point to a valid hostview db):
 

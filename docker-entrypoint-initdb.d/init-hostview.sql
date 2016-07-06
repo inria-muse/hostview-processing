@@ -189,7 +189,7 @@ CREATE TABLE device_info (
     session_id bigint NOT NULL,
     manufacturer character varying(100),
     product character varying(100),
-    operative_system character varying(100),
+    operating_system character varying(100),
     cpu character varying(100),
     memory_installed bigint,
     hdd_capacity bigint,
@@ -231,7 +231,7 @@ ALTER SEQUENCE device_info_id_seq OWNED BY device_info.id;
 
 CREATE TABLE devices (
     id bigint NOT NULL,
-    device_id character varying(260),
+    device_id character varying(260) UNIQUE,
     created_at timestamp without time zone DEFAULT now(),
     user_id bigint,
     secret_token character varying(100)
