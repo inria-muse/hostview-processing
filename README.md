@@ -16,7 +16,13 @@ The app can be run without the file watcher to batch process a set of files. In 
 
 The app depends on Redis (job queue) and Postgresql database (to store the data).
 
-TODO: how to deal with (pcap) files that fail when the corresponding session has not been processed yet (the retries + delay can fix most cases, but it can still happen ...) ?
+The app processes the following raw files:
+
+* xxx_stats.db          - sqlite db
+* xxx.json              - browser plugin data (TODO)
+* xxx.pcap.part|last    - pcap file parts (merging)
+
+Note that this app only takes care of merging incoming pcap parts and moves them to some configured location once the complete file has been received. A separate python app takes care of the pcap processing (tcptrace etc.).
 
 
 ## Deployment

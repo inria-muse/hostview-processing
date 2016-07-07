@@ -12,22 +12,20 @@ describe('sqldb', function() {
         db = new sqldb.DB(process.env.PROCESS_DB);
     });
 
-    describe('#getOrInsertDevice()', function() {
-        var devid = 'test_'+Date.now();
+    describe('#getOrInsert()', function() {
+        var dev = { device_id : 'test_'+Date.now() };
 
         it('should add new device', function(done) {
-            db.getOrInsertDevice(devid, function(err, res) {
+            db.getOrInsert('devices', dev, function(err, res) {
                 assert.equal(!err, true);
-                assert.equal(!res.existed, true);
                 devrowid = res.id;
                 done();
             });
         });
 
         it('should return the existing device', function(done) {
-            db.getOrInsertDevice(devid, function(err, res) {
+            db.getOrInsert('devices', dev, function(err, res) {
                 assert.equal(!err, true);
-                assert.equal(res.existed, true);
                 assert.equal(res.id==devrowid, true);
                 done();
             });

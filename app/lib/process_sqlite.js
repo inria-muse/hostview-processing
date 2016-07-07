@@ -6,18 +6,22 @@ var fs = require('fs-extra')
     , async = require('async')
     , sqlite = require('sqlite3');
 
-/** Process a single sqlite file from Hostview.
+/** 
+ *  Process a single sqlite file from Hostview.
  *
  *  We assume that each sqlite file corresponds to a 'session' and
  *  all that all raw data related to this session is in this sqlite file.
  */
 module.exports.process = function(file, db, cb) {
+    if (!file || !db)
+        return cb(new Error('missing arguments'));
 
     // wrap everything in a transaction on the backend db --
     // any failure to write there will cancel the file processing
     // anc call cb with error
+
     db.transaction(function(client, callback)) {
-        // each file maps to a session
+        // the session of this file
         var session = {
             id = null,
             file_id: file.id,
@@ -28,13 +32,50 @@ module.exports.process = function(file, db, cb) {
             stop_event: null          
         };
 
+        // helper func to refactor out the common processing pattern
+        // (read rows from sqlite and insert to the backend fb)
+        var readloop = function(sql, dsttable, dstrow, callback) {
+            var e = null;
+
+            // fetch data from the sqlite
+            file.db.each(sql, function(err, row) {
+                if (err) { 
+                    // we can't abort the .each(), so just record the error
+                    // -- alternative is to do .all() but .each avoids reading
+                    // all the data in memory (some tables can be huge !!)
+                    e = e||err; 
+                    return;
+                }
+
+                // map from sqlite row to backend db row
+                var o = dstrow(row); 
+
+                // track the latest data row (for when end event is missing)
+                if (o.logged_at)
+                    session.ended_at = utils.datemax(session.ended_at,o.logged_at);
+
+                // add to the backend table
+                client.insert(dsttable, o).run(function(err) { e = e||err; });
+
+            }, function(err) {
+                // .each() completed - pass on any error (or nothing on success)
+                e = e||err;
+                callback(e);
+            });            
+        };
+
         // the processing goes as follows:
+        //
         //   1) uncompress the file to a temp location
         //   2) open sqlite connection to the temp file
-        //   3) add the session row to the backend db
+        //   3) create the session on the backend db
         //   4) bulk of the work: map sqlite tables to backend db
-        //   5) process derived tables and data
+        //   5) process other derived tables and data
         //   6) cleanup temp file
+
+        // running the processing in series (there are parts that could
+        // run in parallel I guess - TODO), if any of the steps fail,
+        // the whole processing stops there and the transaction is rolled back
 
         async.waterfall([
 
@@ -50,23 +91,26 @@ module.exports.process = function(file, db, cb) {
             },
 
             function(callback) {
-                // get session start event
+                // get session start event (there should only be one)
                 sql=`SELECT timestamp started_at, event start_event
                     FROM session 
-                    WHERE event IN ('start','restart','autorestart','resume','autostart')`;
+                    WHERE event IN ('start','restart','autorestart','resume','autostart')
+                    ORDER BY timestamp ASC`;
                 file.db.get(sql, callback);
             },
 
             function(row, callback) {
-                if (!row) return callback(new Error('No data'));
+                // stop here - there's no start event so the db is (assumed?) empty
+                if (!row) return callback(new Error('no data'));
 
                 session.started_at = new Date(row.started_at);
                 session.start_event = row.start_event;
 
-                // get session end event
+                // get session end event (there should only be zero or one)
                 sql=`SELECT timestamp ended_at, event end_event
                     FROM session 
-                    WHERE event IN ('pause','stop','autostop','suspend')`;
+                    WHERE event IN ('pause','stop','autostop','suspend')
+                    ORDER BY timestamp DESC`;
                 file.db.get(sql, callback);
             },
 
@@ -75,6 +119,7 @@ module.exports.process = function(file, db, cb) {
                     session.ended_at = new Date(row.end_at);
                     session.end_event = row.end_event;
                 } else {
+                    // can happen if the hostview cli crashed
                     session.end_event = 'missing';
                     session.ended_at = session.started_at;
                 }
@@ -85,14 +130,13 @@ module.exports.process = function(file, db, cb) {
 
             function(row, callback) {
                 session.id = row.id;
-                callback(undefined);
+                callback(null);
             },
 
             function(callback) {
-                sql=`SELECT * FROM wifistats ORDER BY timestamp ASC`;
-                file.db.each(sql, function(err, row) {
-                    if (err) return callback(err);
-                    var o = {
+                var sql=`SELECT * FROM wifistats ORDER BY timestamp ASC`;
+                readloop(sql, 'wifi_stats', function(row) {
+                    return {
                         session_id: session.id,
                         guid: row.guid,
                         t_speed: row.tspeed,
@@ -102,18 +146,13 @@ module.exports.process = function(file, db, cb) {
                         state: row.state,
                         logged_at: new Date(row.timestamp)
                     };
-                    session.ended_at = utils.datemax(session.ended_at,o.logged_at);
-                    client.insert('wifi_stats',o).run(function(err) {
-                        if (err) return callback(err);
-                    });
                 }, callback);
             },
 
             function(callback) {
-                sql=`SELECT * FROM procs ORDER BY timestamp ASC`;
-                file.db.each(sql, function(err, row) {
-                    if (err) return callback(err);
-                    var o = {
+                var sql=`SELECT * FROM procs ORDER BY timestamp ASC`;
+                readloop(sql, 'processes', function(row) {
+                    return {
                         session_id: session.id,
                         pid: row.pid,
                         name: row.name,
@@ -121,35 +160,25 @@ module.exports.process = function(file, db, cb) {
                         cpu: row.cpu,
                         logged_at: new Date(row.timestamp)
                     };
-                    session.ended_at = utils.datemax(session.ended_at,o.logged_at);
-                    client.insert('processes',o).run(function(err) {
-                        if (err) return callback(err);
-                    });
                 }, callback);
             },
 
             function(callback) {
-                sql=`SELECT * FROM powerstate ORDER BY timestamp ASC`;
-                file.db.each(sql, function(err, row) {
-                    if (err) return callback(err);
-                    var o = {
+                var sql=`SELECT * FROM powerstate ORDER BY timestamp ASC`;
+                readloop(sql, 'power_states', function(row) {
+                    return {
                         session_id: session.id,
                         event: row.event,
                         value: row.value,
                         logged_at: new Date(row.timestamp)
                     };
-                    session.ended_at = utils.datemax(session.ended_at,o.logged_at);
-                    client.insert('power_states',o).run(function(err) {
-                        if (err) return callback(err);
-                    });
                 }, callback);
             },
 
             function(callback) {
-                sql=`SELECT * FROM ports ORDER BY timestamp ASC`;
-                file.db.each(sql, function(err, row) {
-                    if (err) return callback(err);
-                    var o = {
+                var sql=`SELECT * FROM ports ORDER BY timestamp ASC`;
+                readloop(sql, 'ports', function(row) {
+                    return {
                         session_id: session.id,
                         pid: row.pid,
                         name: row.name,
@@ -161,36 +190,26 @@ module.exports.process = function(file, db, cb) {
                         state: row.state,
                         logged_at: new Date(row.timestamp)
                     };
-                    session.ended_at = utils.datemax(session.ended_at,o.logged_at);
-                    client.insert('ports',o).run(function(err) {
-                        if (err) return callback(err);
-                    });
                 }, callback);
             },
 
             function(callback) {
-                sql=`SELECT * FROM io ORDER BY timestamp ASC`;
-                file.db.each(sql, function(err, row) {
-                    if (err) return callback(err);
-                    var o = {
+                var sql=`SELECT * FROM io ORDER BY timestamp ASC`;
+                readloop(sql, 'io', function(row) {
+                    return {
                         session_id: session.id,
                         device: row.device,
                         pid: row.pid,
                         name: row.name,
                         logged_at: new Date(row.timestamp)
                     };
-                    session.ended_at = utils.datemax(session.ended_at,o.logged_at);
-                    client.insert('io',o).run(function(err) {
-                        if (err) return callback(err);
-                    });
                 }, callback);
             },
 
             function(callback) {
-                sql=`SELECT * FROM sysinfo ORDER BY timestamp ASC`;
-                file.db.each(sql, function(err, row) {
-                    if (err) return callback(err);
-                    var o = {
+                var sql=`SELECT * FROM sysinfo ORDER BY timestamp ASC`;
+                readloop(sql, 'device_info', function(row) {
+                    return {
                         session_id: session.id,
                         manufacturer: row.manufacturer,
                         product: row.product,
@@ -205,36 +224,45 @@ module.exports.process = function(file, db, cb) {
                         timezone_offset: row.timezone_offset,
                         logged_at: new Date(row.timestamp)
                     };
-                    client.insert('device_info',o).run(function(err) {
-                        if (err) return callback(err);
-                    });
                 }, callback);
             },
 
             function(callback) {
-                sql=`SELECT * FROM netlabel ORDER BY timestamp ASC`;
-                file.db.each(sql, function(err, row) {
-                    if (err) return callback(err);
-                    var o = {
+                var sql=`SELECT * FROM netlabel ORDER BY timestamp ASC`;
+                readloop(sql, 'netlabels', function(row) {
+                    return {
                         session_id: session.id,
                         guid: row.guid,
                         gateway: row.gateway,
                         label: row.label,
                         logged_at: new Date(row.timestamp)
                     };
-                    client.insert('netlabels',o).run(function(err) {
-                        if (err) return callback(err);
-                    });
                 }, callback);
             },
 
             function(callback) {
-                // reading one ahead so we can log the finish time at once
+                var sql=`SELECT * FROM browseractivity ORDER BY timestamp ASC`;
+                readloop(sql, 'browser_activity', function(row) {
+                    return {
+                        session_id: session.id,
+                        browser: row.browser,
+                        location: row.location,
+                        logged_at: new Date(row.timestamp)
+                    };
+                }, callback);
+            },
+
+            function(callback) {
+                // reading one ahead so we can log the finish as well
                 var prev = undefined;
 
-                sql=`SELECT * FROM activity ORDER BY timestamp ASC`;
+                var e = null;
+                var sql=`SELECT * FROM activity ORDER BY timestamp ASC`;
                 file.db.each(sql, function(err, row) {
-                    if (err) return callback(err);
+                    if (err) { 
+                        e = e||err; 
+                        return; 
+                    };
 
                     var o = {
                         session_id: session.id,
@@ -248,27 +276,192 @@ module.exports.process = function(file, db, cb) {
                     };
 
                     if (prev) {
+                        // ends when the new event happens
                         prev.finished_at = o.logged_at;
                         client.insert('activities', prev).run(function(err) {
-                            if (err) return callback(err);
+                            e = e||err;
                             prev = o;
                         });
                     }
                 }, function(err) {
-                    if (err) return callback(err);
+                    // .each complete
+                    e = e||err;
+                    if (e) return callback(e); // something failed during .each
 
-                    // insert the last activity event
                     if (prev) {
+                        // insert the last activity event
                         prev.finished_at = session.ended_at;
-                        client.insert('activities', prev).run(function(err) {
-                            if (err) return callback(err);
-                            return callback(undefined);
-                        });
+                        client.insert('activities', prev).run(callback);
+                    } else {
+                        callback(null);
                     }
                 });
             },
 
-            // TODO: connections + related stuff!! 
+            function(callback) {
+                var e = null;
+                var sql=`SELECT 
+                            a.*,
+                            l.public_ip,
+                            l.reverse_dns,
+                            l.asnumber,
+                            l.asname,
+                            l.countryCode,
+                            l.city,
+                            l.lat,
+                            l.lon,
+                            l.connstart l_timestamp,
+                            a.timestamp started_at,
+                            MIN(b.timestamp) ended_at 
+                        FROM connectivity a
+                        LEFT JOIN connectivity b
+                            ON a.mac = b.mac
+                            AND b.connected = 0
+                            AND a.timestamp <= b.timestamp
+                        LEFT JOIN location l 
+                            ON a.timestamp = l.connstart
+                        WHERE a.connected = 1
+                        GROUP BY a.timestamp
+                        ORDER BY a.mac ASC, started_at ASC`;
+
+                file.db.each(sql, function(err, row) {
+                    if (err) { 
+                        e = e||err; 
+                        return; 
+                    };
+
+                    var doconn = function(lid) {
+                        var o = {
+                            session_id: session.id,
+                            location_id: lid,
+                            started_at: new Date(row.started_at),
+                            ended_at: (row.ended_at ? new Date(row.ended_at) : session.ended_at),
+                            guid: row.guid,
+                            friendly_name: row.friendlyname,
+                            description: row.description,
+                            dns_suffix: row.dnssuffix,
+                            mac: row.mac,
+                            ips: row.ips.split(','),
+                            gateways: row.gateways.split(','),
+                            dnses: row.dnses.split(','),
+                            t_speed: row.tspeed,
+                            r_speed: row.rspeed,
+                            wireless: row.wireless,
+                            profile: row.profile,
+                            ssid: row.ssid,
+                            bssid: row.bssid,
+                            bssid_type: row.bssidtype,
+                            phy_type: row.phytype,
+                            phy_index: row.phyindex,
+                            channel: row.channel
+                        };
+                        client.insert('connections', prev).run(function(err) {
+                            e = e||err;
+                        });
+                    };
+
+                    if (row.public_ip) {
+                        // insert/get the location first
+                        var l = {
+                            public_ip: row.public_ip.trim(),
+                            reverse_dns: row.reverse_dns.trim(),
+                            asn_number: row.asnumber.trim(),
+                            asn_name: row.asname.trim(),
+                            country_code: row.countryCode.trim(),
+                            city: row.city.trim(),
+                            latitude: row.lat.trim(),
+                            longitude: row.lon.trim()          
+                        };
+
+                        db.getOrInsert('locations', l, function(err, l) {
+                            doconn((l?l.id:null));
+                        });
+
+                    } else {
+                        doconn(null);
+                    }
+
+                }, function(err) {
+                    // .each complete
+                    e = e||err;
+                    callback(e);
+                });
+            },
+
+            function(callback) {
+                var isql = `
+                    INSERT INTO dns_logs(connection_id,
+                        type, ip, host, protocol, 
+                        source_ip, destination_ip,
+                        source_port, destination_port, logged_at)
+                    SELECT c.id, $1, $2, $3, $4, $5, $6, $7, $8, $9
+                    FROM connections c WHERE c.started_at = $10;`;
+
+                var e = null;
+                var sql=`SELECT * FROM dns ORDER BY timestamp ASC`;
+                file.db.each(sql, function(err, row) {
+                    if (err) { 
+                        e = e||err; 
+                        return; 
+                    };
+
+                    var params = [
+                        row.type, row.ip, row.host, row.protocol,
+                        row.srcip, row.destip, row.srcport, row.destport,
+                        new Date(row.timestamp), new Date(row.connstart)
+                    ];
+
+                    client.query(isql, params, function(err) {
+                        e = e||err; 
+                    }); 
+
+                }, function(err) {
+                    // .each complete
+                    e = e||err;
+                    callback(e);
+                });
+            },
+
+            function(callback) {
+                var isql = `
+                    INSERT INTO http_logs(connection_id,
+                            http_verb,
+                            http_verb_param,
+                            http_status_code,
+                            http_host,
+                            referer,
+                            content_type,
+                            content_length,
+                            protocol, source_ip, destination_ip,
+                            source_port, destination_port, logged_at)
+                    SELECT c.id, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13
+                    FROM connections c WHERE c.started_at = $14;`;
+
+                var e = null;
+                var sql=`SELECT * FROM http ORDER BY timestamp ASC`;
+                file.db.each(sql, function(err, row) {
+                    if (err) { 
+                        e = e||err; 
+                        return; 
+                    };
+
+                    var params = [
+                        row.httpverb, row.httpverbparam, row.httpstatuscode,
+                        row.httphost, row.referer, row.contenttype, row.contentlength,
+                        row.protocol, row.srcip, row.destip, row.srcport, row.destport,
+                        new Date(row.timestamp), new Date(row.connstart)
+                    ];
+
+                    client.query(isql, params, function(err) {
+                        e = e||err; 
+                    }); 
+
+                }, function(err) {
+                    // .each complete
+                    e = e||err;
+                    callback(e);
+                });
+            },
 
             function(callback) {
                 // Update the session endtime just in case
@@ -278,6 +471,11 @@ module.exports.process = function(file, db, cb) {
 
             function(callback) {
                 // Count foreground/background io for activities (running apps)
+                //
+                // FIXME: interpretation of the count really depends on the polling
+                // interval, it would make more sense to store the real duration 
+                // instead no ... ??
+                // 
                 var sql = `
                     INSERT INTO activity_io
                     SELECT 
@@ -301,228 +499,10 @@ module.exports.process = function(file, db, cb) {
                     ORDER BY a.logged_at;`;
 
                 client.query(sql, [session.id], callback); 
-            }
-
-            // TODO: other processing ?
-
-        ], callback); // end waterfall - the callback will commit the transaction
-
-    }, function(err, res) {
-        // handle transaction err/success
-        async.waterfall([
-            function(callback) {
-                if (file.db) // sqlite conn
-                    file.db.close(function() { callback(null); });
-                else
-                    callback(null);
-            },
-            function(callback) {
-                if (file.uncompressed_path) // tmp file
-                    fs.unlink(file.uncompressed_path, function() { callback(null); });
-                else
-                    callback(null);
-            }
-        ], function() {
-            // finally signal success/failure
-            if (err) return cb(err);
-            cb(undefined);
-        });
-    });
-}; //process
-
-    createCompleteSession: function(session,file,cb){
-        if(session)
-            function createConnections(sess, callback){
-
-                var runCallback = function(){
-                    //When dns and http are processed, then it's possible to run the callback
-                    var nextf=true;
-                    for(var j= 0; j < conn_processed.length; j++){
-                        if(!(conn_processed[j].dns && conn_processed[j].http )){
-                            nextf = false;
-                            break;
-                        }
-                    }
-                    return nextf
-                }
-
-                var createDNS = function (conn,dns_array,conn_index){
-
-
-                    var dnss=[];
-                    var dns;
-                    while(dns_array.length>0){
-                        dns = dns_array.shift();
-
-                        dns.logged_at = new Date(dns.timestamp);
-                        dns.source_ip = dns.srcip
-                        dns.destination_ip = dns.destip
-                        dns.source_port = dns.srcport
-                        dns.destination_port = dns.destport
-                        dns.connection_id= conn.id;
-
-
-                        delete dns.timestamp;
-                        delete dns.srcip
-                        delete dns.destip
-                        delete dns.srcport
-                        delete dns.destport
-                        delete dns.connstart
-
-                        dnss.push(dns);
-                    }
-
-                    DB.insert('dns_logs',dnss,function(err,inserted_values){
-                        if(err) return callback(sess)
-
-                        conn_processed[conn_index].dns = true;
-                        if(runCallback()) return callback(null,sess);
-                    });
-                };
-
-                var createHTTP = function(conn,http_array,conn_index){
-                    var https=[];
-                    var http;
-                    while(http_array.length>0){
-                        http = http_array.shift();
-
-                        http.logged_at = new Date(http.timestamp);
-                        http.http_verb = http.httpverb;
-                        http.http_verb_param = http.httpverbparam
-                        http.http_status_code = http.httpstatuscode
-                        http.http_host = http.httphost
-                        http.content_type = http.contenttype
-                        http.content_length = http.contentlength
-                        http.source_ip = http.srcip
-                        http.destination_ip = http.destip
-                        http.source_port = http.srcport
-                        http.destination_port = http.destport
-
-                        http.connection_id= conn.id;
-
-
-                        delete http.httpverb;
-                        delete http.httpverbparam
-                        delete http.httpstatuscode
-                        delete http.httphost
-                        delete http.contenttype
-                        delete http.contentlength
-                        delete http.srcip
-                        delete http.destip
-                        delete http.srcport
-                        delete http.destport
-                        delete http.timestamp
-                        delete http.connstart
-
-                        https.push(http);
-                    }
-
-                    DB.insert('http_logs',https,function(err,inserted_values){
-                        if(err) return callback(sess)
-                        conn_processed[conn_index].http = true;
-                        if(runCallback()) return callback(null,sess);
-
-                    });
-                }
-
-                var createConnection = function(location_id,connection,connection_with_location,index){
-                    
-                    connection.location_id = location_id;
-                    var dns_array = connection_with_location.dns;
-                    var http_array = connection_with_location.http;
-
-                    DB.insertOne('connections',connection,function(err,con_c){
-                        if(err){
-                            file.status = 'failed'
-                            file.error_info =  "There's some error inserting connections: " + err
-                            return callback({id: connection.session_id})
-                        }
-                        sails.log.info("Connection inserted with id: " + con_c.id);
-
-                        createDNS(con_c,dns_array,index);
-                        createHTTP(con_c,http_array,index);
-                    });
-                }
-
-                var connections=[];
-                var conn_processed = [];
-                for(var i = 0; i < session.connections.length; i++)
-                    conn_processed.push({dns:false,http:false});
-
-                var cwl={}, conn= {}, loc = {};
-                var i  = 0;
-                while(session.connections.length>0){
-                    
-                    cwl= session.connections.shift(); //connection with location info
-
-
-                    conn.session_id = sess.id;
-                    conn.started_at=new Date(cwl.started_at);
-                    conn.ended_at=cwl.ended_at<Infinity?new Date(cwl.ended_at): new Date(session.ended_at);
-                    conn.name = cwl.name
-                    conn.friendly_name = cwl.friendlyname
-                    conn.description = cwl.description
-                    conn.dns_suffix = cwl.dnssuffix
-                    conn.mac = cwl.mac
-                    conn.ips = cwl.ips.split(",");
-                    conn.gateways = cwl.gateways.split(",");
-                    conn.dnses = cwl.dnses.trim().split(",");
-                    conn.t_speed= cwl.tspeed;
-                    conn.r_speed= cwl.rspeed;
-                    conn.wireless= cwl.wireless;
-                    conn.profile= cwl.profile;
-                    conn.ssid= cwl.ssid;
-                    conn.bssid= cwl.bssid;
-                    conn.bssid_type = cwl.bssidtype;
-                    conn.phy_type = cwl.phytype;
-                    conn.phy_index = cwl.phyindex;
-                    conn.connected = cwl.connected;
-
-                    if(cwl.rdns){ //has location info
-
-                        loc.public_ip = cwl.public_ip.trim();
-                        loc.reverse_dns = cwl.reverse_dns.trim();
-                        loc.asn_number = cwl.asnumber.trim();
-                        loc.asn_name = cwl.asname.trim();
-                        loc.country_code = cwl.countryCode.trim();
-                        loc.city = cwl.city.trim();
-                        loc.latitude = cwl.lat.trim();
-                        loc.longitude = cwl.lon.trim();
-
-                        DB.createOneIfNotExist('locations',loc,function(err,loc_c){
-                            if(err){
-                                file.status = 'failed'
-                                file.error_info =  "There's some error querying/inserting locations: " + err
-                                return callback(sess)
-                            }
-
-                            createConnection(loc_c.id,conn,cwl,i)
-                        });
-
-                    }
-                    else createConnection(null,conn,cwl,i);
-
-                    i++;
-                }
             },
 
-        ],
-        function(err,sess){
-            if(err && err.id) 
-                DB.deleteRow('sessions',{id: err.id}, function(qerr,res){
-                    
-                    //This happen cause all the tables has a ON DELETE CASCADE statement for the session_id.
-                    sails.log.warn("All the information associated with this session (id: " +  err.id + ") was deleted")
-
-
-                    file.status = 'failed'
-                    file.error_info = "There was some errors processing the session file"
-
-                    return cb(null)
-                })
-            else{
-                //ALL THE PROCESSING QUERYS HERE
-                //=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
+            function(callback) {
+                // FIXME
 
                 //Fill the processes_running table
                 q = `
@@ -580,11 +560,32 @@ module.exports.process = function(file, db, cb) {
                     });
                 }
 
-                //=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
-
-
-
-                return cb(err); //Go to the next file
             }
+
+        ], callback); 
+        // end waterfall - the callback will commit the transaction 
+        // or rollback upon failures
+
+    }, function(err, res) {
+        // cleanup + handle transaction err/success
+        async.waterfall([
+            function(callback) {
+                if (file.db) // sqlite conn
+                    file.db.close(function() { callback(null); });
+                else
+                    callback(null);
+            },
+            function(callback) {
+                if (file.uncompressed_path) // tmp file
+                    fs.unlink(file.uncompressed_path, function() { callback(null); });
+                else
+                    callback(null);
+            }
+        ], function() {
+            // finally signal transaction success/failure
+            if (err) return cb(err);
+            cb(undefined);
         });
-}
+    });
+
+}; //process

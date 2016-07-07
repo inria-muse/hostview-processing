@@ -45,21 +45,19 @@ DB.prototype.select = function(table, filter, cb) {
     this.db.select('*').from(table).where(filter).rows(cb);     
 }
 
-DB.prototype.getOrInsertDevice = function(devid, cb) {
+DB.prototype.getOrInsert = function(table, row, cb) {
     if (!this.db) 
         return cb(new Error('No db connection [' + this.dburl + ']'));
 
     this.db.transaction(function(client, callback) {
         async.waterfall([
-            client.select('*').from('devices').where({ device_id : devid }).run,
+            client.select('*').from(table).where(row).run,
             function(res, callback) {
                 if (res.rows.length==0) {
-                    var dev = { device_id : devid };
-                    client.insert('devices', dev).returning('*').row(callback);
+                    client.insert(table, row).returning('*').row(callback);
                 } else {
-                    var dev = res.rows[0];
-                    dev.existed = true;
-                    callback(undefined, dev);
+                    row.id = res.rows[0].id;
+                    callback(undefined, row);
                 }
             }
         ], callback);
@@ -108,7 +106,7 @@ DB.prototype.insertOrUpdateFile = function(file, cb) {
         ], callback);
     }, function(err, res) {
         // called upon transaction success/failure
-        if (err) return cb(err);
+        if (err) return cb(err, file);
         cb(undefined, res);           
     });
 }

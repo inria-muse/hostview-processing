@@ -40,9 +40,8 @@ var kue = require('kue')
   // hostview raw files
   var getFileType = function(path) {
     if (path.indexOf("_stats.db") > 0) return 'sqlite';
-    else if (path.indexOf("_last.pcap") > -1) return 'pcap';
-    else if (path.indexOf("_questionnaire.json") > -1) return 'survey';
-    else if (path.indexOf(".json") > -1) return 'json';
+    else if (path.indexOf(".pcap") > 0) return 'pcap';
+    else if (path.indexOf(".json") > 0) return 'json';
     else return null;
   };  
 
@@ -50,6 +49,7 @@ var kue = require('kue')
   var datadir = process.env.PROCESS_DATA_DIR||'/tmp';
   var config = {
     incoming_dir: datadir+'/incoming',                // incoming files
+    pcap_dir: datadir+'/pcap',                        // merged pcap files
     processed_dir: datadir+'/processed',              // processed files
     failed_dir: datadir+'/failed',                    // failed files
     enable_watch: getbool('PROCESS_WATCH',false),     // monitor incoming files ?
@@ -217,7 +217,7 @@ var kue = require('kue')
       var hv = p[p.length-3];
 
       // make sure the device is recorded in the db and get its id
-      db.getOrInsertDevice(device_id, function(err, dev) {
+      db.getOrInsert('devices', { device_id : device_id }, function(err, dev) {
         if (err) return done(err);
 
         // add or update files table
@@ -229,7 +229,7 @@ var kue = require('kue')
           hostview_version: hv 
         };
 
-        db.insertOrUpdate(file, function(err, res) {
+        db.insertOrUpdateFile(file, function(err, res) {
           if (err) return done(err);
 
           // updates file status on error/success and signals the queue
@@ -254,10 +254,16 @@ var kue = require('kue')
 
             if (job.data.filetype == 'sqlite') {
               process_sqlite.process(file, db, processdone);
+
             } else if (job.data.filetype == 'pcap') {
               process_pcap.process(file, db, processdone);
+
+            } else if (job.data.filetype == 'json') {
+              processdone(new Error('Not impemented: ' + job.data.filetype));
+
             } else {
               processdone(new Error('Unhandled filetype: ' + job.data.filetype));
+              
             }
           } catch(err) {
             console.error('Unhandled worker error', err);   

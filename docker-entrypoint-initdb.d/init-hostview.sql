@@ -135,7 +135,7 @@ CREATE TABLE connections (
     session_id bigint NOT NULL,
     started_at timestamp without time zone,
     ended_at timestamp without time zone,
-    name character varying(260),
+    guid character varying(260),
     friendly_name character varying(260),
     description character varying(260),
     dns_suffix character varying(260),
@@ -152,8 +152,7 @@ CREATE TABLE connections (
     bssid_type character varying(20),
     phy_type character varying(20),
     phy_index integer,
-    channel integer,
-    connected smallint
+    channel integer
 );
 
 
@@ -439,8 +438,7 @@ CREATE TABLE locations (
     country_code character varying(100),
     city character varying(100),
     latitude character varying(100),
-    longitude character varying(100),
-    logged_at timestamp without time zone
+    longitude character varying(100)
 );
 
 
@@ -894,7 +892,8 @@ CREATE TABLE survey_problem_tags (
     id bigint NOT NULL,
     survey_id bigint NOT NULL,
     process_name character varying(260),
-    tag_name character varying(260)
+    process_desc character varying(260),
+    tags text[]
 );
 
 
@@ -922,24 +921,25 @@ ALTER SEQUENCE survey_problem_tags_id_seq OWNED BY survey_problem_tags.id;
 
 
 --
--- Name: survey_purpose_tags; Type: TABLE; Schema: public; Owner: hostview; Tablespace: 
+-- Name: survey_activity_tags; Type: TABLE; Schema: public; Owner: hostview; Tablespace: 
 --
 
-CREATE TABLE survey_purpose_tags (
+CREATE TABLE survey_activity_tags (
     id bigint NOT NULL,
     survey_id bigint NOT NULL,
     process_name character varying(260),
-    tag_name character varying(260)
+    process_desc character varying(260),
+    tags text[]
 );
 
 
-ALTER TABLE public.survey_purpose_tags OWNER TO hostview;
+ALTER TABLE public.survey_activity_tags OWNER TO hostview;
 
 --
--- Name: survey_purpose_tags_id_seq; Type: SEQUENCE; Schema: public; Owner: hostview
+-- Name: survey_activity_tags_id_seq; Type: SEQUENCE; Schema: public; Owner: hostview
 --
 
-CREATE SEQUENCE survey_purpose_tags_id_seq
+CREATE SEQUENCE survey_activity_tags_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -947,13 +947,13 @@ CREATE SEQUENCE survey_purpose_tags_id_seq
     CACHE 1;
 
 
-ALTER TABLE public.survey_purpose_tags_id_seq OWNER TO hostview;
+ALTER TABLE public.survey_activity_tags_id_seq OWNER TO hostview;
 
 --
--- Name: survey_purpose_tags_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: hostview
+-- Name: survey_activity_tags_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: hostview
 --
 
-ALTER SEQUENCE survey_purpose_tags_id_seq OWNED BY survey_purpose_tags.id;
+ALTER SEQUENCE survey_activity_tags_id_seq OWNED BY survey_activity_tags.id;
 
 
 --
@@ -963,9 +963,9 @@ ALTER SEQUENCE survey_purpose_tags_id_seq OWNED BY survey_purpose_tags.id;
 CREATE TABLE surveys (
     id bigint NOT NULL,
     session_id bigint NOT NULL,
-    file_id bigint,
-    qoe smallint,
-    duration character varying(200),
+    ondemand smallint,
+    qoe_score smallint,
+    duration integer,
     started_at timestamp without time zone,
     ended_at timestamp without time zone
 );
@@ -1969,7 +1969,7 @@ ALTER TABLE ONLY survey_problem_tags ALTER COLUMN id SET DEFAULT nextval('survey
 -- Name: id; Type: DEFAULT; Schema: public; Owner: hostview
 --
 
-ALTER TABLE ONLY survey_purpose_tags ALTER COLUMN id SET DEFAULT nextval('survey_purpose_tags_id_seq'::regclass);
+ALTER TABLE ONLY survey_activity_tags ALTER COLUMN id SET DEFAULT nextval('survey_activity_tags_id_seq'::regclass);
 
 
 --
@@ -2233,11 +2233,11 @@ ALTER TABLE ONLY survey_problem_tags
 
 
 --
--- Name: survey_purpose_tags_pkey; Type: CONSTRAINT; Schema: public; Owner: hostview; Tablespace: 
+-- Name: survey_activity_tags_pkey; Type: CONSTRAINT; Schema: public; Owner: hostview; Tablespace: 
 --
 
-ALTER TABLE ONLY survey_purpose_tags
-    ADD CONSTRAINT survey_purpose_tags_pkey PRIMARY KEY (id);
+ALTER TABLE ONLY survey_activity_tags
+    ADD CONSTRAINT survey_activity_tags_pkey PRIMARY KEY (id);
 
 
 --
