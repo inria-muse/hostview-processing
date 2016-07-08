@@ -394,8 +394,17 @@ module.exports.process = function(file, db, cb) {
                         type, ip, host, protocol, 
                         source_ip, destination_ip,
                         source_port, destination_port, logged_at)
-                    SELECT c.id, $1, $2, $3, $4, $5, $6, $7, $8, $9
-                    FROM connections c WHERE c.started_at = $10;`;
+                    SELECT c.id, 
+                           $1::integer, 
+                           $2, 
+                           $3, 
+                           $4::integer, 
+                           $5, 
+                           $6, 
+                           $7::integer, 
+                           $8::integer, 
+                           $9::timestamp
+                    FROM connections c WHERE c.started_at = $10::timestamp;`;
 
                 var e = null;
                 var sql=`SELECT * FROM dns ORDER BY timestamp ASC`;
@@ -434,8 +443,21 @@ module.exports.process = function(file, db, cb) {
                             content_length,
                             protocol, source_ip, destination_ip,
                             source_port, destination_port, logged_at)
-                    SELECT c.id, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13
-                    FROM connections c WHERE c.started_at = $14;`;
+                    SELECT c.id, 
+                           $1::bigint, 
+                           $2, 
+                           $3, 
+                           $4, 
+                           $5, 
+                           $6, 
+                           $7, 
+                           $8::integer, 
+                           $9, 
+                           $10, 
+                           $11::integer, 
+                           $12::integer, 
+                           $13::timestamp
+                    FROM connections c WHERE c.started_at = $14::timestamp;`;
 
                 var e = null;
                 var sql=`SELECT * FROM http ORDER BY timestamp ASC`;
@@ -502,10 +524,9 @@ module.exports.process = function(file, db, cb) {
             },
 
             function(callback) {
-                // FIXME
-
-                //Fill the processes_running table
-                q = `
+                // Fill the processes_running table
+                // TODO: what's with the intervals in the queries .. ? 
+                var sql = `
                     INSERT INTO processes_running
                     SELECT
                         $1::integer as device_id,
@@ -545,21 +566,27 @@ module.exports.process = function(file, db, cb) {
                         WHERE session_id = $2::integer
                     ) p
                 `;
-                p = 60 * 60 * 1000;
 
-                var from = Math.floor(sess.started_at.getTime()/p)*p;   //The started_at truncated to the hour in millisecond
-                var to   = Math.floor(sess.ended_at.getTime()/p+1)*p;   //The ended_at truncated to the hour + 1 hour in millisecond
+                // run the above query for 1h bins from session start to end
+                var bin = 60 * 60 * 1000;
+                var from = Math.floor(session.started_at.getTime()/bin)*bin;
+                var to   = Math.floor(session.ended_at.getTime()/bin+1)*bin;
 
-                for(var i = 0; from+i*p < to; i++){
-                    var f= new Date(from + i*p);
-                    var t= new Date(from + (i+1)*p);
-                    var args=[sess.device_id,sess.id,f,t];
-                    DB.query(q,args,function(err,result){
-                        if(err) return sails.log.error("There was some error inserting values to processes_running: " + err);
-                        sails.log.info("Session (id: "+sess.id+") has inserted values to the processes_running table");
+                var loop = function(d) {
+                    if (d>=to) return callback(null);
+
+                    var args = [session.device_id, 
+                                session.id, 
+                                new Date(d), 
+                                new Date(d+bin)];
+
+                    client.query(q, args, function(err,res) { 
+                        if (err) return callback(err); // stop on error
+                        loop(d+bin);
                     });
-                }
+                };
 
+                loop(from);
             }
 
         ], callback); 

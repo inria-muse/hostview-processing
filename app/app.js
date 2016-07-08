@@ -42,6 +42,7 @@ var kue = require('kue')
     if (path.indexOf("_stats.db") > 0) return 'sqlite';
     else if (path.indexOf(".pcap") > 0) return 'pcap';
     else if (path.indexOf(".json") > 0) return 'json';
+    else if (path.indexOf(".hostview.log") > 0) return 'log';
     else return null;
   };  
 
@@ -256,14 +257,18 @@ var kue = require('kue')
               process_sqlite.process(file, db, processdone);
 
             } else if (job.data.filetype == 'pcap') {
-              process_pcap.process(file, db, processdone);
+              process_pcap.process(file, processdone);
 
             } else if (job.data.filetype == 'json') {
               processdone(new Error('Not impemented: ' + job.data.filetype));
 
+            } else if (job.data.filetype == 'log') {
+              // nothing to do, just signal success
+              processdone(null);
+
             } else {
               processdone(new Error('Unhandled filetype: ' + job.data.filetype));
-              
+
             }
           } catch(err) {
             console.error('Unhandled worker error', err);   

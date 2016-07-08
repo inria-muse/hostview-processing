@@ -6,6 +6,6 @@
  *
  * The pcap processing is done by a separate python app.
  */
-module.exports.process = function(file, db, callback) {
+module.exports.process = function(file, callback) {
     callback(new Error('Not implemented'))    
 }

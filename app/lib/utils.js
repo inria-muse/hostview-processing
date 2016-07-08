@@ -16,7 +16,7 @@ var fs = require('fs-extra')
 module.exports.uncompress = function(src, dst, cb) {
     try {
         fs.ensureDirSync(dst);
-        
+
         child_process.exec(
             "dtrx -q -n -f " + src,
             { cwd: dst },
@@ -34,4 +34,11 @@ module.exports.datemax = function(a,b) {
     if (!b) return a;
     if (!a) return b;
     return (a.getTime()>=b.getTime() ? a : b);
+}
+
+/** Return max of the two dates. */
+module.exports.datemin = function(a,b) {
+    if (!b) return a;
+    if (!a) return b;
+    return (a.getTime()<=b.getTime() ? a : b);
 }
