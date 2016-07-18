@@ -9,10 +9,11 @@ var kue = require('kue')
   , cluster = require('cluster')
   , fs = require('fs-extra')
   , path = require('path')
-  , watch = require('watch')
+  , chokidar = require('chokidar')
   , sqldb = require('./lib/sqldb')
   , process_sqlite = require('./lib/process_sqlite')
-  , process_pcap = require('./lib/process_pcap');
+  , process_pcap = require('./lib/process_pcap')
+  , process_json = require('./lib/process_json');
 
 
 (function() {
@@ -39,18 +40,16 @@ var kue = require('kue')
 
   // hostview raw files
   var getFileType = function(path) {
-    if (path.indexOf("_stats.db") > 0) return 'sqlite';
+    if (path.indexOf("stats.db") > 0) return 'sqlite';
     else if (path.indexOf(".pcap") > 0) return 'pcap';
     else if (path.indexOf(".json") > 0) return 'json';
-    else if (path.indexOf(".hostview.log") > 0) return 'log';
-    else return null;
+    else return 'other';
   };  
 
   // Global configuration
   var datadir = process.env.PROCESS_DATA_DIR||'/tmp';
   var config = {
     incoming_dir: datadir+'/incoming',                // incoming files
-    pcap_dir: datadir+'/pcap',                        // merged pcap files
     processed_dir: datadir+'/processed',              // processed files
     failed_dir: datadir+'/failed',                    // failed files
     enable_watch: getbool('PROCESS_WATCH',false),     // monitor incoming files ?
@@ -62,15 +61,16 @@ var kue = require('kue')
     db: process.env.PROCESS_DB||undefined             // postgresql url (or use default)
   };
 
-  // Ensure we're in the project directory, so relative paths work as expected
-  // no matter where we actually run from.
-  process.chdir(__dirname);
-
   try {
+    // Ensure we're in the project directory, so relative paths work as expected
+    // no matter where we actually run from.
+    process.chdir(__dirname);
+
     // Ensure all target dirs are available
     fs.ensureDirSync(config.incoming_dir);
     fs.ensureDirSync(config.processed_dir);
     fs.ensureDirSync(config.failed_dir);
+
   } catch (err) {
     console.error(err);
     process.exit(1);
@@ -79,10 +79,10 @@ var kue = require('kue')
   // the processing task queue
   var queue = kue.createQueue({redis : config.redis});
 
-  // the incoming files monitor
-  var monitor = undefined;
-
   if (cluster.isMaster) {
+
+    // the incoming files monitor
+    var monitor = undefined;
 
     // master thread 
     console.log('Starting the master process ... stop with Ctrl^C');
@@ -110,10 +110,7 @@ var kue = require('kue')
     });
 
     // handlers for job lifecycle events
-    queue.on('job enqueue', function(id) { 
-      console.log('New job #%d', id);
-
-    }).on('job failed', function(id, message) {
+    queue.on('job failed', function(id, message) {
       console.error('Job #%d failed %s',  id, message);
 
       kue.Job.get(id, function(err, job){
@@ -130,6 +127,7 @@ var kue = require('kue')
           if (err) return console.error(err)
           console.log('File stored as %s', dst);
         });
+
       });
 
     }).on('job complete', function(id, result) {
@@ -149,62 +147,61 @@ var kue = require('kue')
           if (err) return console.error(err)
           console.log('File stored as %s', dst);
         });
+
       });
 
     });
 
     var enqueue = function(path) {
       var task = { filename : path, filetype : getFileType(path) };
+      console.log(JSON.stringify(task,null,2));
 
       var prio = 'normal';
-      if (task.filetype == 'sqlite')
+      if (task.filetype == 'sqlite') {
         prio = 'critical'; // so that sessions get added asap
-      else if (task.filetype == 'pcap')
+      } else if (task.filetype == 'pcap') {
         prio = 'low';
+      }
 
       queue.create('incoming', task)
         .attempts(config.retry)
         .backoff( {delay: config.retry_delay*1000, type:'fixed'} )
         .priority(prio)
         .save(function(err) {
-          if (err) console.error('Failed to create job', err);
+          if (err) {
+            console.error('Failed to create job', err);
+            delete tasklog[path];
+          }
         });
     };
 
-    // scan incoming for any non-processed files
-    fs.walk(config.incoming_dir)
-      .on('data', function(item) {
-        if (item.stats && item.stats.isFile()) enqueue(item.path);
-      })
-      .on('end', function () {
-        if (config.enable_watch) {
-          console.log('Master start watcher ... ');
+    monitor = chokidar.watch(config.incoming_dir, {
+      persistent: config.enable_watch,
+      alwaysStat: true
+    });
 
-          // start a watcher for new incoming files - the monitor will keep the master process alive
-          watch.createMonitor(config.incoming_dir, function(m) {
-            monitor = m;
-            monitor.on("created", function(path, stats) {
-              if (stats && stats.isFile()) enqueue(path);
-            });
-          });
+    monitor.on('add', function(path, stats) {
+      if (stats && stats.isFile()) {
+        enqueue(path);
+      }
+    });
 
-        } else {
-          // wait for all the jobs to be processed and exit
-          console.log('Master waiting for the workers to finish ... ');
-          queue.shutdown(function() {
-            console.log('Master shutting down!');
-            process.exit(0);
-          });
-        }
+    if (!config.enable_watch) {
+      // wait for all the jobs to be processed and exit
+      monitor.on('ready', function() {
+        console.log('Master waiting for the workers to finish ... ');
+        queue.shutdown(function() {
+          console.log('Master shutting down!');
+          process.exit(0);
+        });
       });
+    }
 
   } else {
-    // in the worker
-
+    // in a worker
     var db = new sqldb.DB(config.db);
 
     queue.process('incoming', config.concurrency, function(job, done) {
-
       console.log('Worker handle %s', job.data.filename);
 
       // [..., device_id, hostview_ver, year, month]
@@ -223,53 +220,59 @@ var kue = require('kue')
 
         // add or update files table
         var file = {
-          folder: path.dirname(job.data.filename),
+          folder: path.dirname(job.data.filename).replace(config.incoming,''),
           basename: path.basename(job.data.filename),
           status: 'processing',
           device_id: dev.id,
           hostview_version: hv 
         };
 
+        // this will return error if the file exists already in the database
+        // and has been processed (status == 'success')
         db.insertOrUpdateFile(file, function(err, res) {
           if (err) return done(err);
 
-          // updates file status on error/success and signals the queue
           var processdone = function(err, res) {
+            // updates file status to error/success and signals the queue that we're done
             if (err) {
-              file.status = 'error';
+              file.status = 'errored';
               file.error_info = err+"";
             } else {
               file.status = 'success';
             }
 
-            db.insertOrUpdate(file, function(err2, res2) {
-              // note return the original processing error (if any) on purpose
-              if (err) return done(err);
-              done();
+            db.insertOrUpdateFile(file, function() {
+              // signal done with error (if any)
+              done(err);
             });
+
           }; // processdone
 
-          try {
-            // finally, process the file
-            file.path = job.data.filename;
+          // for processing
+          file.path = job.data.filename;
 
+          try {
+
+            // finally, process the file
             if (job.data.filetype == 'sqlite') {
+              console.log('process_sqlite');
               process_sqlite.process(file, db, processdone);
 
             } else if (job.data.filetype == 'pcap') {
-              process_pcap.process(file, processdone);
+              console.log('process_pcap');
+              process_pcap.process(file, db, config.processed_dir, processdone);
 
             } else if (job.data.filetype == 'json') {
-              processdone(new Error('Not impemented: ' + job.data.filetype));
-
-            } else if (job.data.filetype == 'log') {
-              // nothing to do, just signal success
-              processdone(null);
+              console.log('process_json');
+              process_json.process(file, db, processdone);
 
             } else {
-              processdone(new Error('Unhandled filetype: ' + job.data.filetype));
+              // 'other', just signal success (gets moved to the processed folder)
+              console.log('process_dummy');
+              processdone(null);
 
             }
+
           } catch(err) {
             console.error('Unhandled worker error', err);   
             processdone(err);
@@ -278,5 +281,5 @@ var kue = require('kue')
         }); // db.insertOrUpdate
       }); // db.getOrInsertDevice
     }); // queue.process
-  }
+  } // worker
 })();

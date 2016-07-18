@@ -4,7 +4,7 @@
  * Common helper functions.
  */
 var fs = require('fs-extra')
-    , child_process = require('child_process'),
+    , child_process = require('child_process')
     , path = require("path");
 
 /** 
@@ -21,8 +21,8 @@ module.exports.uncompress = function(src, dst, cb) {
             "dtrx -q -n -f " + src,
             { cwd: dst },
             function(err, stdout, stderr) {
-                if (err) return cb(error);
-                return cb(undefined, path.join[dst,path.basename(src)]);
+                if (err) return cb(err);
+                return cb(undefined, path.join(dst,path.basename(src).replace('.zip','')));
             });
     } catch (err) {
         cb(err, undefined);

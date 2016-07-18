@@ -71,6 +71,7 @@ DB.prototype.getOrInsert = function(table, row, cb) {
 DB.prototype.insertOrUpdateFile = function(file, cb) {
     if (!this.db) 
         return cb(new Error('No db connection [' + this.dburl + ']'));
+    var that = this;
 
     this.db.transaction(function(client, callback) {
 
@@ -83,12 +84,18 @@ DB.prototype.insertOrUpdateFile = function(file, cb) {
             client.select('*').from('files').where(filter).run,
             function(res, callback) {
                 if (res.rows.length==1) {
-                    var update = {
-                        updated_at : that.db.sql('now()'),
-                        status : file.status
-                    };
-                    var idfilter = { id : rows[0].id };
-                    client.update('files', update).where(idfilter).run(callback);
+                    var dbfile = res.rows[0];
+                    if (dbfile.status === 'success') {
+                        // file exists and has been processed already !!
+                        callback(new Error('file already processed ' + dbfile.basename));
+                    } else {
+                        var update = {
+                            updated_at : that.db.sql('now()'),
+                            status : file.status
+                        };
+                        var idfilter = { id : dbfile.id };
+                        client.update('files', update).where(idfilter).run(callback);
+                    }
                 } else {
                     client.insert('files', file).returning('*').row(callback);                    
                 }

@@ -14,16 +14,16 @@ var fs = require('fs-extra')
  */
 module.exports.process = function(file, db, cb) {
     if (!file || !db)
-        return cb(new Error('missing arguments'));
+        return cb(new Error('[process_sqlite] missing arguments'));
 
     // wrap everything in a transaction on the backend db --
     // any failure to write there will cancel the file processing
     // anc call cb with error
 
-    db.transaction(function(client, callback)) {
+    db.transaction(function(client, callback) {
         // the session of this file
         var session = {
-            id = null,
+            id : null,
             file_id: file.id,
             device_id: file.device_id,
             started_at: null,
@@ -86,8 +86,9 @@ module.exports.process = function(file, db, cb) {
             utils.uncompress,
 
             function(path, callback) {
+                console.log('sqlite connect ' + path);
                 file.uncompressed_path = path;
-                file.db = new sqlite.Database(path, sqlite3.OPEN_READONLY, callback);
+                file.db = new sqlite.Database(path, sqlite.OPEN_READONLY, callback);
             },
 
             function(callback) {
@@ -130,10 +131,12 @@ module.exports.process = function(file, db, cb) {
 
             function(row, callback) {
                 session.id = row.id;
+                console.log(JSON.stringify(session, null, 2));
                 callback(null);
             },
 
             function(callback) {
+                console.log('wifistats');
                 var sql=`SELECT * FROM wifistats ORDER BY timestamp ASC`;
                 readloop(sql, 'wifi_stats', function(row) {
                     return {
@@ -150,6 +153,7 @@ module.exports.process = function(file, db, cb) {
             },
 
             function(callback) {
+                console.log('processes');
                 var sql=`SELECT * FROM procs ORDER BY timestamp ASC`;
                 readloop(sql, 'processes', function(row) {
                     return {
@@ -164,6 +168,7 @@ module.exports.process = function(file, db, cb) {
             },
 
             function(callback) {
+                console.log('powerstates');
                 var sql=`SELECT * FROM powerstate ORDER BY timestamp ASC`;
                 readloop(sql, 'power_states', function(row) {
                     return {
@@ -176,6 +181,7 @@ module.exports.process = function(file, db, cb) {
             },
 
             function(callback) {
+                console.log('ports');
                 var sql=`SELECT * FROM ports ORDER BY timestamp ASC`;
                 readloop(sql, 'ports', function(row) {
                     return {
@@ -194,6 +200,7 @@ module.exports.process = function(file, db, cb) {
             },
 
             function(callback) {
+                console.log('io');
                 var sql=`SELECT * FROM io ORDER BY timestamp ASC`;
                 readloop(sql, 'io', function(row) {
                     return {
@@ -207,6 +214,7 @@ module.exports.process = function(file, db, cb) {
             },
 
             function(callback) {
+                console.log('deviceinfo');
                 var sql=`SELECT * FROM sysinfo ORDER BY timestamp ASC`;
                 readloop(sql, 'device_info', function(row) {
                     return {
@@ -228,6 +236,7 @@ module.exports.process = function(file, db, cb) {
             },
 
             function(callback) {
+                console.log('netlabels');
                 var sql=`SELECT * FROM netlabel ORDER BY timestamp ASC`;
                 readloop(sql, 'netlabels', function(row) {
                     return {
@@ -241,6 +250,7 @@ module.exports.process = function(file, db, cb) {
             },
 
             function(callback) {
+                console.log('browseractivity');
                 var sql=`SELECT * FROM browseractivity ORDER BY timestamp ASC`;
                 readloop(sql, 'browser_activity', function(row) {
                     return {
@@ -253,6 +263,8 @@ module.exports.process = function(file, db, cb) {
             },
 
             function(callback) {
+                console.log('activity');
+
                 // reading one ahead so we can log the finish as well
                 var prev = undefined;
 
@@ -299,6 +311,7 @@ module.exports.process = function(file, db, cb) {
             },
 
             function(callback) {
+                console.log('connectivity');
                 var e = null;
                 var sql=`SELECT 
                             a.*,
@@ -389,6 +402,7 @@ module.exports.process = function(file, db, cb) {
             },
 
             function(callback) {
+                console.log('dnslogs');
                 var isql = `
                     INSERT INTO dns_logs(connection_id,
                         type, ip, host, protocol, 
@@ -432,6 +446,7 @@ module.exports.process = function(file, db, cb) {
             },
 
             function(callback) {
+                console.log('httplogs');
                 var isql = `
                     INSERT INTO http_logs(connection_id,
                             http_verb,
@@ -492,6 +507,8 @@ module.exports.process = function(file, db, cb) {
             },
 
             function(callback) {
+                console.log('activity_io');
+
                 // Count foreground/background io for activities (running apps)
                 //
                 // FIXME: interpretation of the count really depends on the polling
@@ -524,6 +541,8 @@ module.exports.process = function(file, db, cb) {
             },
 
             function(callback) {
+                console.log('processes_running');
+
                 // Fill the processes_running table
                 // TODO: what's with the intervals in the queries .. ? 
                 var sql = `
@@ -615,4 +634,4 @@ module.exports.process = function(file, db, cb) {
         });
     });
 
-}; //process
+}; //processes

@@ -2981,17 +2981,8 @@ ALTER TABLE ONLY survey_problem_tags
 -- Name: survey_purpose_tags_survey_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: hostview
 --
 
-ALTER TABLE ONLY survey_purpose_tags
-    ADD CONSTRAINT survey_purpose_tags_survey_id_fkey FOREIGN KEY (survey_id) REFERENCES surveys(id) ON DELETE CASCADE;
-
-
---
--- Name: surveys_file_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: hostview
---
-
-ALTER TABLE ONLY surveys
-    ADD CONSTRAINT surveys_file_id_fkey FOREIGN KEY (file_id) REFERENCES files(id);
-
+ALTER TABLE ONLY survey_activity_tags
+    ADD CONSTRAINT survey_activity_tags_survey_id_fkey FOREIGN KEY (survey_id) REFERENCES surveys(id) ON DELETE CASCADE;
 
 --
 -- Name: surveys_session_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: hostview

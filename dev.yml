@@ -19,10 +19,10 @@ services:
      PROCESS_DB: postgres://hostview:h0stvi3w@postgres/hostview
      PROCESS_WATCH: 'yes'
      PROCESS_DATA_DIR: '/data'
-     PROCESS_RETRY: 3
+     PROCESS_RETRY: 1
      PROCESS_RETRY_DELAY: 1
      PROCESS_WORKERS: 1
-     PROCESS_CONCURRENCY: 3
+     PROCESS_CONCURRENCY: 1
 
   redis:
     image: redis:3.0

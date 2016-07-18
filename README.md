@@ -1,6 +1,6 @@
 # Hostview Processing
 
-Hostview Processing contains the data processing scripts that store the raw files (sqlite dbs and pcaps) from Hostview clients (received with hostview-upload) to the backend database. The basic workflow is as follows:
+Hostview Processing contains the data processing scripts that store the raw files (sqlite dbs, pcaps, jsons) from Hostview clients (received with hostview-upload) to the backend database. The basic workflow is as follows:
 
 * a master process is watching new files in an incoming folder
 * when a new file is received, a processing task is queued on the task queue
@@ -18,11 +18,9 @@ The app depends on Redis (job queue) and Postgresql database (to store the data)
 
 The app processes the following raw files:
 
-* xxx_stats.db          - sqlite db
-* xxx.json              - browser plugin data (TODO)
-* xxx.pcap.part|last    - pcap file parts (merging)
-
-Note that this app only takes care of merging incoming pcap parts and moves them to some configured location once the complete file has been received. A separate python app takes care of the pcap processing (tcptrace etc.).
+* xxx_stats.db              - sqlite db
+* xxx.json                  - browser plugin data (TODO)
+* xxx.part|last.pcap        - pcap
 
 
 ## Deployment
@@ -46,6 +44,10 @@ To get a shell access to the app container (will not start the app) with data mo
 
     docker run --rm -it -e NODE_ENV=development hostview/processing /bin/bash
 
+To connect to the development database:
+
+    docker run -it --rm --net=<hostview back-tier> --link <postgres container name>:postgres postgres psql -h postgres -U hostview
+
 
 ### Testing
 
@@ -57,7 +59,7 @@ To run all the unit tests (in ./app/test), first make sure a postgres is running
 
 Then run the processing app container with the test flag (make sure to link to the postgres container or point to a valid hostview db):
 
-    $ docker run --rm --net=<hostview_back-tier> --link <postgres:9.5 container name>:postgres -e NODE_ENV=development -e TEST=1 -e PROCESS_DB=postgres://hostview:h0stvi3w@postgres/hostview hostview/processing
+    $ docker run --rm --net=<hostview back-tier> --link <postgres container name>:postgres -e NODE_ENV=development -e TEST=1 -e PROCESS_DB=postgres://hostview:h0stvi3w@postgres/hostview hostview/processing
 
 
 ### Production
