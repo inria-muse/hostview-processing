@@ -91,7 +91,8 @@ var kue = require('kue')
     process.on('SIGTERM', () => {
       console.log('Received SIGTERM, closing the workers ...');
 
-      if (monitor) monitor.stop();
+      if (monitor) monitor.close();
+      monitor = undefined;
 
       queue.shutdown(5000, function(err) {
         console.log( 'Shutdown: ', err||'' );
@@ -170,11 +171,13 @@ var kue = require('kue')
         .save(function(err) {
           if (err) {
             console.error('Failed to create job', err);
-            delete tasklog[path];
           }
         });
     };
 
+    // this will first scan the incoming folder and then start
+    // watching for new files (or just waits for the processing to finish
+    // if watcher is disabled)
     monitor = chokidar.watch(config.incoming_dir, {
       persistent: config.enable_watch,
       alwaysStat: true
@@ -189,13 +192,16 @@ var kue = require('kue')
     if (!config.enable_watch) {
       // wait for all the jobs to be processed and exit
       monitor.on('ready', function() {
+        monitor.close();
+        monitor = undefined;
+
         console.log('Master waiting for the workers to finish ... ');
         queue.shutdown(function() {
           console.log('Master shutting down!');
           process.exit(0);
         });
       });
-    }
+    } // else keep on watching for new files
 
   } else {
     // in a worker
@@ -207,7 +213,7 @@ var kue = require('kue')
       // [..., device_id, hostview_ver, year, month]
       var p = path.dirname(job.data.filename).split(path.sep);
       if (p.length < 5) {
-        return done(new Error('Invalid filename: ' + job.data.filename));
+        return done(new Error('Invalid filepath: ' + job.data.filename));
       }
 
       // extract Hostview id and version from the filepath

@@ -44,20 +44,22 @@ To get a shell access to the app container (will not start the app) with data mo
 
     docker run --rm -it -e NODE_ENV=development hostview/processing /bin/bash
 
-To connect to the development database:
+To find out more about running containers, networks etc:
 
-    docker run -it --rm --net=<hostview back-tier> --link <postgres container name>:postgres postgres psql -h postgres -U hostview
+    $ docker ps -a                  // list all containers
+    $ docker network ls             // list networks
+    $ docker start <container id>   // start existing container
+
+To connect to the development database container:
+
+    $ docker run -it --rm --net=<hostview back-tier network name> --link <postgres container name>:postgres postgres psql -h postgres -U hostview
 
 
 ### Testing
 
-To run all the unit tests (in ./app/test), first make sure a postgres is running somewhere (e.g. in a container from above):
+To run all the unit tests (in ./app/test), first make sure a postgres + redis are running somewhere (e.g. in a container from above). NOTE: the tests will clear all data in the DB !!!
 
-    $ docker ps -a                               // list all containers
-    $ docker network ls                          // list networks
-    $ docker start <postgres:9.5 container id>   // start existing container
-
-Then run the processing app container with the test flag (make sure to link to the postgres container or point to a valid hostview db):
+Then run the processing app container with the test flag:
 
     $ docker run --rm --net=<hostview back-tier> --link <postgres container name>:postgres -e NODE_ENV=development -e TEST=1 -e PROCESS_DB=postgres://hostview:h0stvi3w@postgres/hostview hostview/processing
 
@@ -66,4 +68,4 @@ Then run the processing app container with the test flag (make sure to link to t
 
 To run the app, use Docker Compose (will start Redis + App containers, with on host Postgresql):
 
-    PROCESS_DB=postgres://<user>:<password>@ucn.inria.fr/hostview docker-compose -f prod.yml -d up
+    PROCESS_DB=postgres://<user>:<password>@ucn.inria.fr/hostview2016 docker-compose -f prod.yml -d up

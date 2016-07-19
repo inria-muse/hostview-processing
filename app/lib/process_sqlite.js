@@ -23,7 +23,6 @@ module.exports.process = function(file, db, cb) {
     db.transaction(function(client, callback) {
         // the session of this file
         var session = {
-            id : null,
             file_id: file.id,
             device_id: file.device_id,
             started_at: null,
@@ -93,6 +92,7 @@ module.exports.process = function(file, db, cb) {
 
             function(callback) {
                 // get session start event (there should only be one)
+                console.log('select session start');
                 sql=`SELECT timestamp started_at, event start_event
                     FROM session 
                     WHERE event IN ('start','restart','autorestart','resume','autostart')
@@ -101,6 +101,8 @@ module.exports.process = function(file, db, cb) {
             },
 
             function(row, callback) {
+                console.log('session start', row);
+
                 // stop here - there's no start event so the db is (assumed?) empty
                 if (!row) return callback(new Error('no data'));
 
@@ -108,7 +110,7 @@ module.exports.process = function(file, db, cb) {
                 session.start_event = row.start_event;
 
                 // get session end event (there should only be zero or one)
-                sql=`SELECT timestamp ended_at, event end_event
+                sql=`SELECT timestamp ended_at, event stop_event
                     FROM session 
                     WHERE event IN ('pause','stop','autostop','suspend')
                     ORDER BY timestamp DESC`;
@@ -116,22 +118,24 @@ module.exports.process = function(file, db, cb) {
             },
 
             function(row, callback) {
+                console.log('session stop', row);
                 if (row) {
-                    session.ended_at = new Date(row.end_at);
-                    session.end_event = row.end_event;
+                    session.ended_at = new Date(row.ended_at);
+                    session.stop_event = row.stop_event;
                 } else {
                     // can happen if the hostview cli crashed
-                    session.end_event = 'missing';
+                    session.stop_event = 'missing';
                     session.ended_at = session.started_at;
                 }
 
                 // store the session, returns the inserted row
+                console.log('insert session', session);
                 client.insert('sessions', session).returning('*').row(callback);
             },
 
             function(row, callback) {
                 session.id = row.id;
-                console.log(JSON.stringify(session, null, 2));
+                console.log('final session', session);
                 callback(null);
             },
 
@@ -368,7 +372,7 @@ module.exports.process = function(file, db, cb) {
                             phy_index: row.phyindex,
                             channel: row.channel
                         };
-                        client.insert('connections', prev).run(function(err) {
+                        client.insert('connections', o).run(function(err) {
                             e = e||err;
                         });
                     };
@@ -459,7 +463,7 @@ module.exports.process = function(file, db, cb) {
                             protocol, source_ip, destination_ip,
                             source_port, destination_port, logged_at)
                     SELECT c.id, 
-                           $1::bigint, 
+                           $1, 
                            $2, 
                            $3, 
                            $4, 
@@ -477,19 +481,24 @@ module.exports.process = function(file, db, cb) {
                 var e = null;
                 var sql=`SELECT * FROM http ORDER BY timestamp ASC`;
                 file.db.each(sql, function(err, row) {
-                    if (err) { 
+                    if (e||err) { 
                         e = e||err; 
                         return; 
                     };
+                    
+                    console.log('raw http', row);
 
                     var params = [
                         row.httpverb, row.httpverbparam, row.httpstatuscode,
-                        row.httphost, row.referer, row.contenttype, row.contentlength,
-                        row.protocol, row.srcip, row.destip, row.srcport, row.destport,
+                        row.httphost, row.referer, row.contenttype, 
+                        row.contentlength,
+                        row.protocol, row.srcip, row.destip, 
+                        row.srcport, row.destport,
                         new Date(row.timestamp), new Date(row.connstart)
                     ];
 
                     client.query(isql, params, function(err) {
+                        if (!e && err) console.log(err);
                         e = e||err; 
                     }); 
 
@@ -613,6 +622,9 @@ module.exports.process = function(file, db, cb) {
         // or rollback upon failures
 
     }, function(err, res) {
+        if (err)
+            console.error('[process_sqlite] transaction failed', err);
+
         // cleanup + handle transaction err/success
         async.waterfall([
             function(callback) {

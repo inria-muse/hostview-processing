@@ -20,7 +20,7 @@
   "scripts": {
     "debug": "node debug app.js",
     "start": "node app.js",
-    "test": "node ./node_modules/mocha/bin/mocha test/bootstrap.js test/*.test.js"
+    "test": "node ./node_modules/mocha/bin/mocha test/bootstrap.js test/process_sqlite.test.js"
   },
   "main": "app.js",
   "author": "Anna-Kaisa Pietilainen<anna-kaisa.pietilainen@inria.fr>",

@@ -25,6 +25,35 @@ DB.prototype.transaction =  function(func, cb) {
     }, cb);
 };
 
+// (FOR TESTING) THIS WILL EMPTY ALL TABLES, USE WITH CARE !!!
+DB.prototype.clearall = function(cb) {
+    var tables = ['activities','activity_io','browser_activity',
+    'connections','device_info','dns_logs',
+    'http_logs','io','locations','netlabels','pcap_events',
+    'pcap_flow','pcap_rtt','pcap_throughput','ports',
+    'power_states','processes','processes_running',
+    'survey_problem_tags','survey_activity_tags','surveys',
+    'video_buffered_play_time_sample','video_buffering_event',
+    'video_off_screen_event','video_pause_event','video_playback_quality_sample',
+    'video_player_size','video_resolution','video_seek_event',
+    'video_session','wifi_stats',
+    'users','sessions','pcap','pcap_file','files','devices'];
+
+    this.db.transaction(function(client, callback) {
+        var loop = function() {
+            if (tables.length>0) {
+                client.delete(tables.shift()).run(function(err,res) {
+                    if (err) return callback(err); // stop on error
+                    return loop(); // next table
+                });
+            } else {
+                callback(null); // all done
+            }
+        }
+        loop();
+    }, cb);
+}
+
 //--- highlevel funcs ---
 
 DB.prototype.insert = function(table, rowdata, cb) {
@@ -42,7 +71,10 @@ DB.prototype.update = function(table, newdata, filter, cb) {
 DB.prototype.select = function(table, filter, cb) {
     if (!this.db) 
         return cb(new Error('No db connection [' + this.dburl + ']'));
-    this.db.select('*').from(table).where(filter).rows(cb);     
+    if (filter)
+        this.db.select('*').from(table).where(filter).rows(cb);     
+    else
+        this.db.select('*').from(table).rows(cb);     
 }
 
 DB.prototype.getOrInsert = function(table, row, cb) {
@@ -88,7 +120,7 @@ DB.prototype.insertOrUpdateFile = function(file, cb) {
                     if (dbfile.status === 'success') {
                         // file exists and has been processed already !!
                         callback(new Error('file already processed ' + dbfile.basename));
-                    } else {
+                    } else {                        
                         var update = {
                             updated_at : that.db.sql('now()'),
                             status : file.status
@@ -97,24 +129,18 @@ DB.prototype.insertOrUpdateFile = function(file, cb) {
                         client.update('files', update).where(idfilter).run(callback);
                     }
                 } else {
-                    client.insert('files', file).returning('*').row(callback);                    
+                    client.insert('files', file).run(callback);
                 }
             },
             function(res, callback) {
-                if (res) {
-                    // from insert
-                    callback(undefined, res);
-                } else {
-                    // from update
-                    file.updated_at = new Date();
-                    callback(undefined, file);
-                }
+                client.select('*').from('files').where(filter).row(callback);
             }
         ], callback);
+
     }, function(err, res) {
         // called upon transaction success/failure
-        if (err) return cb(err, file);
-        cb(undefined, res);           
+        if (err) return cb(err);
+        cb(undefined, res);
     });
 }
 
