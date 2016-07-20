@@ -54,14 +54,16 @@ To connect to the development database container:
 
     $ docker run -it --rm --net=<hostview back-tier network name> --link <postgres container name>:postgres postgres psql -h postgres -U hostview
 
+The code uses 'debug' library, enable debug logs with environment variable DEBUG=hostview.
+
 
 ### Testing
 
-To run all the unit tests (in ./app/test), first make sure a postgres + redis are running somewhere (e.g. in a container from above). NOTE: the tests will clear all data in the DB !!!
+To run all the unit tests (in ./app/test), first make sure a postgres + redis are running somewhere (e.g. in a container from above). NOTE: the tests will clear all data in the DB so do not run the tests againts a production DB !!!
 
 Then run the processing app container with the test flag:
 
-    $ docker run --rm --net=<hostview back-tier> --link <postgres container name>:postgres -e NODE_ENV=development -e TEST=1 -e PROCESS_DB=postgres://hostview:h0stvi3w@postgres/hostview hostview/processing
+    $ docker run --rm --net=<hostview back-tier> --link <postgres container name>:postgres -e DEBUG=hostview -e NODE_ENV=development -e TEST=1 -e PROCESS_DB=postgres://hostview:h0stvi3w@postgres/hostview hostview/processing
 
 
 ### Production

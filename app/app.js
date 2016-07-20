@@ -6,6 +6,7 @@
  */
 
 var kue = require('kue')
+  , debug = require('debug')('hostview')
   , cluster = require('cluster')
   , fs = require('fs-extra')
   , path = require('path')
@@ -86,7 +87,7 @@ var kue = require('kue')
 
     // master thread 
     console.log('Starting the master process ... stop with Ctrl^C');
-    console.log(JSON.stringify(config,null,2));
+    debug(JSON.stringify(config,null,2));
 
     process.on('SIGTERM', () => {
       console.log('Received SIGTERM, closing the workers ...');
@@ -95,7 +96,7 @@ var kue = require('kue')
       monitor = undefined;
 
       queue.shutdown(5000, function(err) {
-        console.log( 'Shutdown: ', err||'' );
+        debug( 'Shutdown: ', err||'' );
         process.exit(0);
       });
     });
@@ -119,14 +120,14 @@ var kue = require('kue')
 
         job.remove(function(err){
           if (err) return console.error(err);
-          console.log('Removed job #%d', job.id);
+          debug('Removed job #%d', job.id);
         });
 
         // move the file to the failed folder
         var dst = job.data.filename.replace(config.incoming_dir, config.failed_dir);
         fs.move(job.data.filename, dst, function (err) {
           if (err) return console.error(err)
-          console.log('File stored as %s', dst);
+          debug('File stored as %s', dst);
         });
 
       });
@@ -139,14 +140,14 @@ var kue = require('kue')
 
         job.remove(function(err){
           if (err) return console.error(err);
-          console.log('Removed job #%d', job.id);
+          debug('Removed job #%d', job.id);
         });
 
         // move the file to the processed folder
         var dst = job.data.filename.replace(config.incoming_dir, config.processed_dir);
         fs.move(job.data.filename, dst, function (err) {
           if (err) return console.error(err)
-          console.log('File stored as %s', dst);
+          debug('File stored as %s', dst);
         });
 
       });
@@ -155,7 +156,7 @@ var kue = require('kue')
 
     var enqueue = function(path) {
       var task = { filename : path, filetype : getFileType(path) };
-      console.log(JSON.stringify(task,null,2));
+      debug(JSON.stringify(task,null,2));
 
       var prio = 'normal';
       if (task.filetype == 'sqlite') {
@@ -231,7 +232,8 @@ var kue = require('kue')
           status: 'processing',
           device_id: dev.id,
           hostview_version: hv 
-        };
+        };        
+        debug('processing',file);
 
         // this will return error if the file exists already in the database
         // and has been processed (status == 'success')

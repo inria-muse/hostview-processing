@@ -50,8 +50,12 @@ describe('process_sqlite', function() {
 
         it('should not error on db file', function(done) {
             process_sqlite.process(file, db, function(err) {
-                expect(err).to.equal(undefined);
-                done();
+                assert.equal(!err, true);
+                db._db.select('*').from('sessions').row(function(err, row) {
+                    assert.equal(!err, true);
+                    assert.equal(row!=undefined, true);
+                    done();
+                });
             });
         });
     });

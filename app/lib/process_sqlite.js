@@ -2,6 +2,7 @@
  * process_sqlite.js
  */
 var fs = require('fs-extra')
+    , debug = require('debug')('hostview')
     , utils = require('./utils')
     , async = require('async')
     , sqlite = require('sqlite3');
@@ -20,612 +21,539 @@ module.exports.process = function(file, db, cb) {
     // any failure to write there will cancel the file processing
     // anc call cb with error
 
-    db.transaction(function(client, callback) {
-        // the session of this file
-        var session = {
-            file_id: file.id,
-            device_id: file.device_id,
-            started_at: null,
-            ended_at: null,
-            start_event: null,
-            stop_event: null          
-        };
+    // the session of this file
+    var session = {
+        file_id: file.id,
+        device_id: file.device_id,
+        started_at: null,
+        ended_at: null,
+        start_event: null,
+        stop_event: null          
+    };
 
-        // helper func to refactor out the common processing pattern
-        // (read rows from sqlite and insert to the backend fb)
-        var readloop = function(sql, dsttable, dstrow, callback) {
+    // helper func to refactor out the common processing pattern
+    // (read rows from sqlite and insert to the backend fb)
+    var readloop = function(client, sql, dsttable, dstrow, callback) {
+        var e = null;
+
+        // fetch data from the sqlite
+        file.db.each(sql, function(err, row) {
+            if (err) { 
+                // we can't abort the .each(), so just record the error
+                // -- alternative is to do .all() but .each avoids reading
+                // all the data in memory (some tables can be huge !!)
+                if (!e) debug('readloop fail: ' + dsttable, err);
+                e = e||err; 
+                return;
+            }
+
+            // map from sqlite row to backend db row
+            var o = dstrow(row); 
+
+            // track the latest data row just in case
+            if (o.logged_at)
+                session.ended_at = utils.datemax(session.ended_at, o.logged_at);
+
+            // add to the backend table
+            client.insert(dsttable, o).run(function(err, res) { 
+                e = e||err; 
+            });
+
+        }, function(err) {
+            // .each() completed - pass on any error (or nothing on success)
+            e = e||err;
+            debug('readloop complete: ' + dsttable, e);
+            callback(e);
+        });            
+    };
+
+    // the processing goes as follows:
+    //
+    //   1) uncompress the file to a temp location
+    //   2) open sqlite connection to the temp file
+    //   3) create the session on the backend db
+    //   4) bulk of the work: map sqlite tables to backend db
+    //   5) process other derived tables and data
+    //   6) cleanup temp file
+
+    // running the processing in series (there are parts that could
+    // run in parallel I guess - TODO), if any of the steps fail,
+    // the whole processing stops there and the transaction is rolled back
+
+    async.waterfall([
+
+        function(callback) {
+            callback(null, file.path, '/tmp/'+file.device_id);
+        },
+
+        utils.uncompress,
+
+        function(path, callback) {
+            debug('sqlite connect ' + path);
+            file.uncompressed_path = path;
+            file.db = new sqlite.Database(path, sqlite.OPEN_READONLY, callback);
+        },
+
+        db._db.raw('BEGIN;', []).run,
+
+        function(res, callback) {        
+            db._db.raw('SET CONSTRAINTS ALL DEFERRED;', []).run(callback);
+        },
+
+        function(res, callback) {
+            // get session start event (there should only be one)
+            debug('select session start');
+            sql=`SELECT timestamp started_at, event start_event
+                FROM session 
+                WHERE event IN ('start','restart','autorestart','resume','autostart')
+                ORDER BY timestamp ASC`;
+            file.db.get(sql, callback);
+        },
+
+        function(row, callback) {
+            debug('session start', row);
+
+            // stop here - there's no start event so the db is (assumed?) empty
+            if (!row) return callback(new Error('no data'));
+
+            session.started_at = new Date(row.started_at);
+            session.start_event = row.start_event;
+
+            // get session end event (there should only be zero or one)
+            sql=`SELECT timestamp ended_at, event stop_event
+                FROM session 
+                WHERE event IN ('pause','stop','autostop','suspend')
+                ORDER BY timestamp DESC`;
+            file.db.get(sql, callback);
+        },
+
+        function(row, callback) {
+            debug('session stop', row);
+            if (row) {
+                session.ended_at = new Date(row.ended_at);
+                session.stop_event = row.stop_event;
+            } else {
+                // can happen if the hostview cli crashed
+                session.stop_event = 'missing';
+                session.ended_at = session.started_at;
+            }
+
+            // store the session, returns the inserted row
+            db._db.insert('sessions', session).returning('*').row(callback);
+        },
+
+        function(row, callback) {
+            session.id = row.id;
+            debug('session', session);
+            callback(null);
+        },
+
+        function(callback) {
+            debug('wifistats');
+            var sql=`SELECT * FROM wifistats ORDER BY timestamp ASC`;
+            readloop(db._db, sql, 'wifi_stats', function(row) {
+                return {
+                    session_id: session.id,
+                    guid: row.guid,
+                    t_speed: row.tspeed,
+                    r_speed: row.rspeed,
+                    signal: row.signal,
+                    rssi: row.rssi,
+                    state: row.state,
+                    logged_at: new Date(row.timestamp)
+                };
+            }, callback);
+        },
+
+        function(callback) {
+            debug('processes');
+            var sql=`SELECT * FROM procs ORDER BY timestamp ASC LIMIT 10`;
+            readloop(db._db, sql, 'processes', function(row) {
+                return {
+                    session_id: session.id,
+                    pid: row.pid,
+                    name: row.name,
+                    memory: row.memory,
+                    cpu: row.cpu,
+                    logged_at: new Date(row.timestamp)
+                };
+            }, callback);
+        },
+
+        /*
+        function(callback) {
+            debug('powerstates');
+            var sql=`SELECT * FROM powerstate ORDER BY timestamp ASC`;
+            readloop(db._db, sql, 'power_states', function(row) {
+                return {
+                    session_id: session.id,
+                    event: row.event,
+                    value: row.value,
+                    logged_at: new Date(row.timestamp)
+                };
+            }, callback);
+        },
+
+        function(callback) {
+            debug('ports');
+            var sql=`SELECT * FROM ports ORDER BY timestamp ASC`;
+            readloop(db._db, sql, 'ports', function(row) {
+                return {
+                    session_id: session.id,
+                    pid: row.pid,
+                    name: row.name,
+                    protocol: row.protocol,
+                    source_ip: row.srcip,
+                    destination_ip: row.destip,
+                    source_port: row.srcport,
+                    destination_port: row.destport,
+                    state: row.state,
+                    logged_at: new Date(row.timestamp)
+                };
+            }, callback);
+        },
+
+        function(callback) {
+            debug('io');
+            var sql=`SELECT * FROM io ORDER BY timestamp ASC`;
+            readloop(db._db, sql, 'io', function(row) {
+                return {
+                    session_id: session.id,
+                    device: row.device,
+                    pid: row.pid,
+                    name: row.name,
+                    logged_at: new Date(row.timestamp)
+                };
+            }, callback);
+        },
+
+        function(callback) {
+            debug('deviceinfo');
+            var sql=`SELECT * FROM sysinfo ORDER BY timestamp ASC`;
+            readloop(db._db, sql, 'device_info', function(row) {
+                return {
+                    session_id: session.id,
+                    manufacturer: row.manufacturer,
+                    product: row.product,
+                    operating_system: row.os,
+                    cpu: row.cpu,
+                    memory_installed: row.totalRAM,
+                    hdd_capacity: row.totalHDD,
+                    serial_number: row.serial,
+                    hostview_version: row.hostview_version,
+                    settings_version: row.settings_version,
+                    timezone: row.timezone,
+                    timezone_offset: row.timezone_offset,
+                    logged_at: new Date(row.timestamp)
+                };
+            }, callback);
+        },
+
+        function(callback) {
+            debug('netlabels');
+            var sql=`SELECT * FROM netlabel ORDER BY timestamp ASC`;
+            readloop(db._db, sql, 'netlabels', function(row) {
+                return {
+                    session_id: session.id,
+                    guid: row.guid,
+                    gateway: row.gateway,
+                    label: row.label,
+                    logged_at: new Date(row.timestamp)
+                };
+            }, callback);
+        },
+
+        function(callback) {
+            debug('browseractivity');
+            var sql=`SELECT * FROM browseractivity ORDER BY timestamp ASC`;
+            readloop(db._db, sql, 'browser_activity', function(row) {
+                return {
+                    session_id: session.id,
+                    browser: row.browser,
+                    location: row.location,
+                    logged_at: new Date(row.timestamp)
+                };
+            }, callback);
+        },
+        
+        function(callback) {
+            debug('activity');
+
+            // reading one ahead so we can log the finish as well
+            var prev = undefined;
+
             var e = null;
-
-            // fetch data from the sqlite
+            var sql=`SELECT * FROM activity ORDER BY timestamp ASC`;
             file.db.each(sql, function(err, row) {
                 if (err) { 
-                    // we can't abort the .each(), so just record the error
-                    // -- alternative is to do .all() but .each avoids reading
-                    // all the data in memory (some tables can be huge !!)
                     e = e||err; 
-                    return;
+                    return; 
+                };
+
+                var o = {
+                    session_id: session.id,
+                    user_name: row.user,
+                    pid: row.pid,
+                    name: row.name,
+                    description: row.description,
+                    fullscreen: row.fullscreen,
+                    idle: row.idle,
+                    logged_at: new Date(row.timestamp)
+                };
+
+                if (prev) {
+                    // ends when the new event happens
+                    prev.finished_at = o.logged_at;
+                    db._db.insert('activities', prev).run(function(err, res) {
+                        e = e||err;
+                        prev = o;
+                    });
                 }
-
-                // map from sqlite row to backend db row
-                var o = dstrow(row); 
-
-                // track the latest data row (for when end event is missing)
-                if (o.logged_at)
-                    session.ended_at = utils.datemax(session.ended_at,o.logged_at);
-
-                // add to the backend table
-                client.insert(dsttable, o).run(function(err) { e = e||err; });
-
             }, function(err) {
-                // .each() completed - pass on any error (or nothing on success)
+                // .each complete
                 e = e||err;
-                callback(e);
-            });            
-        };
+                if (e) return callback(e); // something failed during .each
 
-        // the processing goes as follows:
-        //
-        //   1) uncompress the file to a temp location
-        //   2) open sqlite connection to the temp file
-        //   3) create the session on the backend db
-        //   4) bulk of the work: map sqlite tables to backend db
-        //   5) process other derived tables and data
-        //   6) cleanup temp file
-
-        // running the processing in series (there are parts that could
-        // run in parallel I guess - TODO), if any of the steps fail,
-        // the whole processing stops there and the transaction is rolled back
-
-        async.waterfall([
-
-            function(callback) {
-                callback(null, file.path, '/tmp/'+file.device_id);
-            },
-
-            utils.uncompress,
-
-            function(path, callback) {
-                console.log('sqlite connect ' + path);
-                file.uncompressed_path = path;
-                file.db = new sqlite.Database(path, sqlite.OPEN_READONLY, callback);
-            },
-
-            function(callback) {
-                // get session start event (there should only be one)
-                console.log('select session start');
-                sql=`SELECT timestamp started_at, event start_event
-                    FROM session 
-                    WHERE event IN ('start','restart','autorestart','resume','autostart')
-                    ORDER BY timestamp ASC`;
-                file.db.get(sql, callback);
-            },
-
-            function(row, callback) {
-                console.log('session start', row);
-
-                // stop here - there's no start event so the db is (assumed?) empty
-                if (!row) return callback(new Error('no data'));
-
-                session.started_at = new Date(row.started_at);
-                session.start_event = row.start_event;
-
-                // get session end event (there should only be zero or one)
-                sql=`SELECT timestamp ended_at, event stop_event
-                    FROM session 
-                    WHERE event IN ('pause','stop','autostop','suspend')
-                    ORDER BY timestamp DESC`;
-                file.db.get(sql, callback);
-            },
-
-            function(row, callback) {
-                console.log('session stop', row);
-                if (row) {
-                    session.ended_at = new Date(row.ended_at);
-                    session.stop_event = row.stop_event;
+                if (prev) {
+                    // insert the last activity event
+                    prev.finished_at = session.ended_at;
+                    db._db.insert('activities', prev).run(function(err, res) {
+                        e = e||err;
+                        callback(e);
+                    });
                 } else {
-                    // can happen if the hostview cli crashed
-                    session.stop_event = 'missing';
-                    session.ended_at = session.started_at;
+                    callback(null);
                 }
+            });
+        },
 
-                // store the session, returns the inserted row
-                console.log('insert session', session);
-                client.insert('sessions', session).returning('*').row(callback);
-            },
+        function(callback) {
+            debug('connectivity');
+            var e = null;
+            var sql=`SELECT 
+                        a.*,
+                        l.public_ip,
+                        l.reverse_dns,
+                        l.asnumber,
+                        l.asname,
+                        l.countryCode,
+                        l.city,
+                        l.lat,
+                        l.lon,
+                        l.connstart l_timestamp,
+                        a.timestamp started_at,
+                        MIN(b.timestamp) ended_at 
+                    FROM connectivity a
+                    LEFT JOIN connectivity b
+                        ON a.mac = b.mac
+                        AND b.connected = 0
+                        AND a.timestamp <= b.timestamp
+                    LEFT JOIN location l 
+                        ON a.timestamp = l.connstart
+                    WHERE a.connected = 1
+                    GROUP BY a.timestamp
+                    ORDER BY a.mac ASC, started_at ASC`;
 
-            function(row, callback) {
-                session.id = row.id;
-                console.log('final session', session);
-                callback(null);
-            },
+            file.db.each(sql, function(err, row) {
+                if (err) { 
+                    e = e||err; 
+                    return; 
+                };
 
-            function(callback) {
-                console.log('wifistats');
-                var sql=`SELECT * FROM wifistats ORDER BY timestamp ASC`;
-                readloop(sql, 'wifi_stats', function(row) {
-                    return {
-                        session_id: session.id,
-                        guid: row.guid,
-                        t_speed: row.tspeed,
-                        r_speed: row.rspeed,
-                        signal: row.signal,
-                        rssi: row.rssi,
-                        state: row.state,
-                        logged_at: new Date(row.timestamp)
-                    };
-                }, callback);
-            },
-
-            function(callback) {
-                console.log('processes');
-                var sql=`SELECT * FROM procs ORDER BY timestamp ASC`;
-                readloop(sql, 'processes', function(row) {
-                    return {
-                        session_id: session.id,
-                        pid: row.pid,
-                        name: row.name,
-                        memory: row.memory,
-                        cpu: row.cpu,
-                        logged_at: new Date(row.timestamp)
-                    };
-                }, callback);
-            },
-
-            function(callback) {
-                console.log('powerstates');
-                var sql=`SELECT * FROM powerstate ORDER BY timestamp ASC`;
-                readloop(sql, 'power_states', function(row) {
-                    return {
-                        session_id: session.id,
-                        event: row.event,
-                        value: row.value,
-                        logged_at: new Date(row.timestamp)
-                    };
-                }, callback);
-            },
-
-            function(callback) {
-                console.log('ports');
-                var sql=`SELECT * FROM ports ORDER BY timestamp ASC`;
-                readloop(sql, 'ports', function(row) {
-                    return {
-                        session_id: session.id,
-                        pid: row.pid,
-                        name: row.name,
-                        protocol: row.protocol,
-                        source_ip: row.srcip,
-                        destination_ip: row.destip,
-                        source_port: row.srcport,
-                        destination_port: row.destport,
-                        state: row.state,
-                        logged_at: new Date(row.timestamp)
-                    };
-                }, callback);
-            },
-
-            function(callback) {
-                console.log('io');
-                var sql=`SELECT * FROM io ORDER BY timestamp ASC`;
-                readloop(sql, 'io', function(row) {
-                    return {
-                        session_id: session.id,
-                        device: row.device,
-                        pid: row.pid,
-                        name: row.name,
-                        logged_at: new Date(row.timestamp)
-                    };
-                }, callback);
-            },
-
-            function(callback) {
-                console.log('deviceinfo');
-                var sql=`SELECT * FROM sysinfo ORDER BY timestamp ASC`;
-                readloop(sql, 'device_info', function(row) {
-                    return {
-                        session_id: session.id,
-                        manufacturer: row.manufacturer,
-                        product: row.product,
-                        operating_system: row.os,
-                        cpu: row.cpu,
-                        memory_installed: row.totalRAM,
-                        hdd_capacity: row.totalHDD,
-                        serial_number: row.serial,
-                        hostview_version: row.hostview_version,
-                        settings_version: row.settings_version,
-                        timezone: row.timezone,
-                        timezone_offset: row.timezone_offset,
-                        logged_at: new Date(row.timestamp)
-                    };
-                }, callback);
-            },
-
-            function(callback) {
-                console.log('netlabels');
-                var sql=`SELECT * FROM netlabel ORDER BY timestamp ASC`;
-                readloop(sql, 'netlabels', function(row) {
-                    return {
-                        session_id: session.id,
-                        guid: row.guid,
-                        gateway: row.gateway,
-                        label: row.label,
-                        logged_at: new Date(row.timestamp)
-                    };
-                }, callback);
-            },
-
-            function(callback) {
-                console.log('browseractivity');
-                var sql=`SELECT * FROM browseractivity ORDER BY timestamp ASC`;
-                readloop(sql, 'browser_activity', function(row) {
-                    return {
-                        session_id: session.id,
-                        browser: row.browser,
-                        location: row.location,
-                        logged_at: new Date(row.timestamp)
-                    };
-                }, callback);
-            },
-
-            function(callback) {
-                console.log('activity');
-
-                // reading one ahead so we can log the finish as well
-                var prev = undefined;
-
-                var e = null;
-                var sql=`SELECT * FROM activity ORDER BY timestamp ASC`;
-                file.db.each(sql, function(err, row) {
-                    if (err) { 
-                        e = e||err; 
-                        return; 
-                    };
-
+                var doconn = function(lid) {
                     var o = {
                         session_id: session.id,
-                        user_name: row.user,
-                        pid: row.pid,
-                        name: row.name,
+                        location_id: lid,
+                        started_at: new Date(row.started_at),
+                        ended_at: (row.ended_at ? new Date(row.ended_at) : session.ended_at),
+                        guid: row.guid,
+                        friendly_name: row.friendlyname,
                         description: row.description,
-                        fullscreen: row.fullscreen,
-                        idle: row.idle,
-                        logged_at: new Date(row.timestamp)
+                        dns_suffix: row.dnssuffix,
+                        mac: row.mac,
+                        ips: row.ips.split(','),
+                        gateways: row.gateways.split(','),
+                        dnses: row.dnses.split(','),
+                        t_speed: row.tspeed,
+                        r_speed: row.rspeed,
+                        wireless: row.wireless,
+                        profile: row.profile,
+                        ssid: row.ssid,
+                        bssid: row.bssid,
+                        bssid_type: row.bssidtype,
+                        phy_type: row.phytype,
+                        phy_index: row.phyindex,
+                        channel: row.channel
                     };
 
-                    if (prev) {
-                        // ends when the new event happens
-                        prev.finished_at = o.logged_at;
-                        client.insert('activities', prev).run(function(err) {
-                            e = e||err;
-                            prev = o;
-                        });
-                    }
-                }, function(err) {
-                    // .each complete
-                    e = e||err;
-                    if (e) return callback(e); // something failed during .each
-
-                    if (prev) {
-                        // insert the last activity event
-                        prev.finished_at = session.ended_at;
-                        client.insert('activities', prev).run(callback);
-                    } else {
-                        callback(null);
-                    }
-                });
-            },
-
-            function(callback) {
-                console.log('connectivity');
-                var e = null;
-                var sql=`SELECT 
-                            a.*,
-                            l.public_ip,
-                            l.reverse_dns,
-                            l.asnumber,
-                            l.asname,
-                            l.countryCode,
-                            l.city,
-                            l.lat,
-                            l.lon,
-                            l.connstart l_timestamp,
-                            a.timestamp started_at,
-                            MIN(b.timestamp) ended_at 
-                        FROM connectivity a
-                        LEFT JOIN connectivity b
-                            ON a.mac = b.mac
-                            AND b.connected = 0
-                            AND a.timestamp <= b.timestamp
-                        LEFT JOIN location l 
-                            ON a.timestamp = l.connstart
-                        WHERE a.connected = 1
-                        GROUP BY a.timestamp
-                        ORDER BY a.mac ASC, started_at ASC`;
-
-                file.db.each(sql, function(err, row) {
-                    if (err) { 
-                        e = e||err; 
-                        return; 
-                    };
-
-                    var doconn = function(lid) {
-                        var o = {
-                            session_id: session.id,
-                            location_id: lid,
-                            started_at: new Date(row.started_at),
-                            ended_at: (row.ended_at ? new Date(row.ended_at) : session.ended_at),
-                            guid: row.guid,
-                            friendly_name: row.friendlyname,
-                            description: row.description,
-                            dns_suffix: row.dnssuffix,
-                            mac: row.mac,
-                            ips: row.ips.split(','),
-                            gateways: row.gateways.split(','),
-                            dnses: row.dnses.split(','),
-                            t_speed: row.tspeed,
-                            r_speed: row.rspeed,
-                            wireless: row.wireless,
-                            profile: row.profile,
-                            ssid: row.ssid,
-                            bssid: row.bssid,
-                            bssid_type: row.bssidtype,
-                            phy_type: row.phytype,
-                            phy_index: row.phyindex,
-                            channel: row.channel
-                        };
-                        client.insert('connections', o).run(function(err) {
-                            e = e||err;
-                        });
-                    };
-
-                    if (row.public_ip) {
-                        // insert/get the location first
-                        var l = {
-                            public_ip: row.public_ip.trim(),
-                            reverse_dns: row.reverse_dns.trim(),
-                            asn_number: row.asnumber.trim(),
-                            asn_name: row.asname.trim(),
-                            country_code: row.countryCode.trim(),
-                            city: row.city.trim(),
-                            latitude: row.lat.trim(),
-                            longitude: row.lon.trim()          
-                        };
-
-                        db.getOrInsert('locations', l, function(err, l) {
-                            doconn((l?l.id:null));
-                        });
-
-                    } else {
-                        doconn(null);
-                    }
-
-                }, function(err) {
-                    // .each complete
-                    e = e||err;
-                    callback(e);
-                });
-            },
-
-            function(callback) {
-                console.log('dnslogs');
-                var isql = `
-                    INSERT INTO dns_logs(connection_id,
-                        type, ip, host, protocol, 
-                        source_ip, destination_ip,
-                        source_port, destination_port, logged_at)
-                    SELECT c.id, 
-                           $1::integer, 
-                           $2, 
-                           $3, 
-                           $4::integer, 
-                           $5, 
-                           $6, 
-                           $7::integer, 
-                           $8::integer, 
-                           $9::timestamp
-                    FROM connections c WHERE c.started_at = $10::timestamp;`;
-
-                var e = null;
-                var sql=`SELECT * FROM dns ORDER BY timestamp ASC`;
-                file.db.each(sql, function(err, row) {
-                    if (err) { 
-                        e = e||err; 
-                        return; 
-                    };
-
-                    var params = [
-                        row.type, row.ip, row.host, row.protocol,
-                        row.srcip, row.destip, row.srcport, row.destport,
-                        new Date(row.timestamp), new Date(row.connstart)
-                    ];
-
-                    client.query(isql, params, function(err) {
-                        e = e||err; 
-                    }); 
-
-                }, function(err) {
-                    // .each complete
-                    e = e||err;
-                    callback(e);
-                });
-            },
-
-            function(callback) {
-                console.log('httplogs');
-                var isql = `
-                    INSERT INTO http_logs(connection_id,
-                            http_verb,
-                            http_verb_param,
-                            http_status_code,
-                            http_host,
-                            referer,
-                            content_type,
-                            content_length,
-                            protocol, source_ip, destination_ip,
-                            source_port, destination_port, logged_at)
-                    SELECT c.id, 
-                           $1, 
-                           $2, 
-                           $3, 
-                           $4, 
-                           $5, 
-                           $6, 
-                           $7, 
-                           $8::integer, 
-                           $9, 
-                           $10, 
-                           $11::integer, 
-                           $12::integer, 
-                           $13::timestamp
-                    FROM connections c WHERE c.started_at = $14::timestamp;`;
-
-                var e = null;
-                var sql=`SELECT * FROM http ORDER BY timestamp ASC`;
-                file.db.each(sql, function(err, row) {
-                    if (e||err) { 
-                        e = e||err; 
-                        return; 
-                    };
-                    
-                    console.log('raw http', row);
-
-                    var params = [
-                        row.httpverb, row.httpverbparam, row.httpstatuscode,
-                        row.httphost, row.referer, row.contenttype, 
-                        row.contentlength,
-                        row.protocol, row.srcip, row.destip, 
-                        row.srcport, row.destport,
-                        new Date(row.timestamp), new Date(row.connstart)
-                    ];
-
-                    client.query(isql, params, function(err) {
-                        if (!e && err) console.log(err);
-                        e = e||err; 
-                    }); 
-
-                }, function(err) {
-                    // .each complete
-                    e = e||err;
-                    callback(e);
-                });
-            },
-
-            function(callback) {
-                // Update the session endtime just in case
-                client.update('sessions', {ended_at : session.ended_at})
-                    .where({id : session.id}).run(callback);
-            },
-
-            function(callback) {
-                console.log('activity_io');
-
-                // Count foreground/background io for activities (running apps)
-                //
-                // FIXME: interpretation of the count really depends on the polling
-                // interval, it would make more sense to store the real duration 
-                // instead no ... ??
-                // 
-                var sql = `
-                    INSERT INTO activity_io
-                    SELECT 
-                        a.id, 
-                        a.session_id,
-                        a.name,
-                        a.description, 
-                        a.idle, 
-                        a.pid, 
-                        a.logged_at, 
-                        a.finished_at, 
-                        COUNT(io.logged_at)
-                    FROM activities a 
-                    LEFT JOIN io 
-                    ON io.logged_at BETWEEN a.logged_at AND a.finished_at
-                        AND io.pid = a.pid
-                        AND io.name = a.name
-                        AND io.session_id = a.session_id
-                    WHERE a.session_id = $1
-                    GROUP BY a.id,a.session_id,a.name,a.description,a.idle,a.pid,a.logged_at,a.finished_at
-                    ORDER BY a.logged_at;`;
-
-                client.query(sql, [session.id], callback); 
-            },
-
-            function(callback) {
-                console.log('processes_running');
-
-                // Fill the processes_running table
-                // TODO: what's with the intervals in the queries .. ? 
-                var sql = `
-                    INSERT INTO processes_running
-                    SELECT
-                        $1::integer as device_id,
-                        $2::integer as session_id,
-                        p.dname,
-                        (
-                            SELECT 
-                                COUNT(*)
-                            FROM
-                            (
-                                SELECT 1 AS count
-                                FROM processes
-                                WHERE name = p.dname
-                                    AND session_id = $2::integer
-                                    AND logged_at BETWEEN $3::timestamp AND $4::timestamp
-                                GROUP BY date_trunc('minute',logged_at + interval '30 seconds')
-                            ) sq
-                        )::integer AS process_running,
-                        (
-                            SELECT
-                                EXTRACT (
-                                    EPOCH FROM (
-                                        LEAST(date_trunc('minute',ended_at + interval '30 seconds'), $4::timestamp) 
-                                        - 
-                                        GREATEST(date_trunc('minute',started_at + interval '30 seconds'), $3::timestamp)
-                                    )
-                                )/60
-                            FROM sessions 
-                            WHERE id = $2::integer
-                        ) AS session_running,
-                        $3::timestamp as start_at,
-                        $4::timestamp as end_at
-                    FROM(
-                        SELECT
-                        DISTINCT name AS dname
-                        FROM processes
-                        WHERE session_id = $2::integer
-                    ) p
-                `;
-
-                // run the above query for 1h bins from session start to end
-                var bin = 60 * 60 * 1000;
-                var from = Math.floor(session.started_at.getTime()/bin)*bin;
-                var to   = Math.floor(session.ended_at.getTime()/bin+1)*bin;
-
-                var loop = function(d) {
-                    if (d>=to) return callback(null);
-
-                    var args = [session.device_id, 
-                                session.id, 
-                                new Date(d), 
-                                new Date(d+bin)];
-
-                    client.query(q, args, function(err,res) { 
-                        if (err) return callback(err); // stop on error
-                        loop(d+bin);
+                    db._db.insert('connections', o).run(function(err, res) {
+                        e = e||err;
                     });
                 };
 
-                loop(from);
+                if (row.public_ip) {
+                    // insert/get the location first
+                    var l = {
+                        public_ip: row.public_ip.trim(),
+                        reverse_dns: row.reverse_dns.trim(),
+                        asn_number: row.asnumber.trim(),
+                        asn_name: row.asname.trim(),
+                        country_code: row.countryCode.trim(),
+                        city: row.city.trim(),
+                        latitude: row.lat.trim(),
+                        longitude: row.lon.trim()          
+                    };
+
+                    db._db.select('*').from('locations')
+                        .where(l).rows(function(err, rows) {
+                            if (err) return callback(err);
+                            if (rows.length == 0) {
+                                db._db.insert(table, row).returning('*').row(function(err, res) {
+                                    if (err) return callback(err);
+                                    doconn(res.id);
+                                });
+                            } else {
+                                doconn(rows[0].id);
+                            }
+                        });
+
+                } else {
+                    doconn(null);
+                }
+
+            }, function(err) {
+                // .each complete
+                e = e||err;
+                callback(e);
+            });
+        },
+
+        function(callback) {
+            debug('dnslogs');
+            var isql = `
+                INSERT INTO dns_logs(connection_id,
+                    type, ip, host, protocol, 
+                    source_ip, destination_ip,
+                    source_port, destination_port, logged_at)
+                SELECT c.id, 
+                       $1, 
+                       $2, 
+                       $3, 
+                       $4, 
+                       $5, 
+                       $6, 
+                       $7, 
+                       $8, 
+                       $9
+                FROM connections c WHERE c.started_at = $10;`;
+
+            var e = null;
+            var sql=`SELECT * FROM dns ORDER BY timestamp ASC`;
+            file.db.each(sql, function(err, row) {
+                if (err) { 
+                    e = e||err; 
+                    return; 
+                };
+
+                var params = [
+                    row.type, row.ip, row.host, row.protocol,
+                    row.srcip, row.destip, row.srcport, row.destport,
+                    new Date(row.timestamp), new Date(row.connstart)
+                ];
+
+                db._db.raw(isql, params).run(function(err, res) {
+                    e = e||err; 
+                }); 
+
+            }, function(err) {
+                // .each complete
+                e = e||err;
+                callback(e);
+            });
+        },
+
+        function(callback) {
+            debug('httplogs');
+
+            var isql = `
+                INSERT INTO http_logs(
+                    connection_id,
+                    http_verb,
+                    http_verb_param,
+                    http_status_code,
+                    http_host,
+                    referer,
+                    content_type,
+                    content_length,
+                    protocol, 
+                    source_ip, 
+                    destination_ip,
+                    source_port, 
+                    destination_port, 
+                    logged_at)
+                SELECT c.id, 
+                       $1, 
+                       $2, 
+                       $3, 
+                       $4, 
+                       $5, 
+                       $6, 
+                       $7, 
+                       $8, 
+                       $9, 
+                       $10, 
+                       $11, 
+                       $12, 
+                       $13
+                FROM connections c WHERE c.started_at = $14;`;
+
+            var getv = function(row, col) {
+                if (!row[col] || row[col]=='')
+                    return null;
+                return row[col];
             }
 
-        ], callback); 
-        // end waterfall - the callback will commit the transaction 
-        // or rollback upon failures
+            var e = null;
+            var sql=`SELECT * FROM http ORDER BY timestamp ASC`;
 
-    }, function(err, res) {
-        if (err)
-            console.error('[process_sqlite] transaction failed', err);
+            file.db.each(sql, function(err, row) {
+                if (e||err) { 
+                    e = e||err; 
+                    return; 
+                };
 
-        // cleanup + handle transaction err/success
+                var params = [
+                    getv(row,'httpverb'), 
+                    getv(row,'httpverbparam'), 
+                    getv(row,'httpstatuscode'),
+                    getv(row,'httphost'), 
+                    getv(row,'referer'), 
+                    getv(row,'contenttype'), 
+                    getv(row,'contentlength'),
+                    getv(row,'protocol'), 
+                    getv(row,'srcip'), 
+                    getv(row,'destip'), 
+                    getv(row,'srcport'), 
+                    getv(row,'destport'),
+                    new Date(row.timestamp), 
+                    new Date(row.connstart)
+                ];
+
+                db._db.raw(isql, params).run(function(err, res) {
+                    e = e||err; 
+                }); 
+
+            }, function(err) {
+                // .each complete
+                e = e||err;
+                callback(e);
+            });
+        },*/
+
+        db._db.raw('COMMIT;', []).run
+    ], 
+    function(err) {
+        // if we receive error here, the transaction failed
         async.waterfall([
             function(callback) {
                 if (file.db) // sqlite conn
@@ -638,12 +566,153 @@ module.exports.process = function(file, db, cb) {
                     fs.unlink(file.uncompressed_path, function() { callback(null); });
                 else
                     callback(null);
+            },
+            function(callback) {
+                if (err) {
+                    debug('rollback transaction', err); 
+                    db._db.raw('ROLLBACK;', []).run(callback);
+                } else {
+                    debug('raw data transaction ok');             
+                    callback(null);
+                }
             }
         ], function() {
-            // finally signal transaction success/failure
-            if (err) return cb(err);
-            cb(undefined);
-        });
-    });
+            return cb(err);
+            /*
+            if (!err) {
+                debug('do processed tables');  
 
-}; //processes
+                // TODO: do we need these ??
+                // some more post processing after the raw data is inserted
+                db._db.transaction(function(client, callback) {
+                    async.waterfall([
+                        function(callback) {                
+                            debug('activity_io');
+
+                            // Count foreground/background io for activities (running apps)
+                            //
+                            // FIXME: interpretation of the count really depends on the polling
+                            // interval, it would make more sense to store the real duration 
+                            // instead no ... ??
+                            // 
+                            var sql = `INSERT INTO activity_io
+                                SELECT 
+                                    a.id, 
+                                    a.session_id,
+                                    a.name,
+                                    a.description, 
+                                    a.idle, 
+                                    a.pid, 
+                                    a.logged_at, 
+                                    a.finished_at, 
+                                    COUNT(io.logged_at)
+                                FROM activities a 
+                                LEFT JOIN io 
+                                ON io.logged_at BETWEEN a.logged_at AND a.finished_at
+                                    AND io.pid = a.pid
+                                    AND io.name = a.name
+                                    AND io.session_id = a.session_id
+                                WHERE a.session_id = $1
+                                GROUP BY a.id
+                                ORDER BY a.id;`;
+
+                            client.raw(sql, [session.id]).run(callback); 
+                        },
+
+                        function(res, callback) {
+                            debug('processes_running');
+
+                            // Fill the processes_running table
+                            // TODO: what's with the intervals in the queries .. ? 
+                            var sql = `INSERT INTO processes_running
+                                SELECT
+                                    $1::integer as device_id,
+                                    $2::integer as session_id,
+                                    p.dname,
+                                    (
+                                        SELECT 
+                                            COUNT(*)
+                                        FROM
+                                        (
+                                            SELECT 1 AS count
+                                            FROM processes
+                                            WHERE name = p.dname
+                                                AND session_id = $2::integer
+                                                AND logged_at BETWEEN $3::timestamp AND $4::timestamp
+                                            GROUP BY date_trunc('minute',logged_at + interval '30 seconds')
+                                        ) sq
+                                    )::integer AS process_running,
+                                    (
+                                        SELECT
+                                            EXTRACT (
+                                                EPOCH FROM (
+                                                    LEAST(date_trunc('minute',ended_at + interval '30 seconds'), $4::timestamp) 
+                                                    - 
+                                                    GREATEST(date_trunc('minute',started_at + interval '30 seconds'), $3::timestamp)
+                                                )
+                                            )/60
+                                        FROM sessions 
+                                        WHERE id = $2::integer
+                                    ) AS session_running,
+                                    $3::timestamp as start_at,
+                                    $4::timestamp as end_at
+                                FROM(
+                                    SELECT
+                                    DISTINCT name AS dname
+                                    FROM processes
+                                    WHERE session_id = $2::integer
+                                ) p`;
+
+                            // run the above query for 1h bins from session start to end
+                            var bin = 60 * 60 * 1000;
+                            var from = Math.floor(session.started_at.getTime()/bin)*bin;
+                            var to   = Math.floor(session.ended_at.getTime()/bin+1)*bin;
+
+                            var loop = function(d) {
+                                if (d>=to) return callback(null);
+
+                                var args = [session.device_id, 
+                                            session.id, 
+                                            new Date(d), 
+                                            new Date(d+bin)];
+
+                                client.raw(sql, args).run(function(err,res) { 
+                                    if (err) return callback(err); // stop on error
+                                    process.nextTick(loop,d+bin);
+                                });
+                            };
+
+                            loop(from);
+                        },
+
+                        client.update('sessions', { ended_at : session.ended_at })
+                            .where({ id : session.id }).run
+
+                    ], callback); 
+                    // end waterfall - the callback will commit the transaction 
+                    // or rollback upon failures
+
+                }, function(err2) {
+                    // handle transaction succes / failure
+                    if (err2) {
+                        debug('processing transaction failed', err2); 
+
+                        // this will cascade delete everything
+                        db.delete('sessions', { id : session.id }, function() {
+                            return cb(err2);
+                        });
+
+                    } else {
+                        // all good !
+                        debug('processing transaction ok');
+                        return cb(null);
+                    }
+                });
+
+            } else {
+                // main transaction failed
+                return cb(err);
+            }*/
+        }); // cleanup waterfall
+    }); // main watefall
+}; //process

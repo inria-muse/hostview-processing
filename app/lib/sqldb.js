@@ -9,20 +9,7 @@ var pgb = require('pg-bricks')
 /** Constructor */
 var DB = function(dburl) {
     this.dburl = dburl;
-    this.db = pgb.configure(dburl);
-};
-
-// note the caller func receives pg-bricks client
-DB.prototype.transaction =  function(func, cb) {
-    if (!this.db) 
-        return cb(new Error('No db connection [' + this.dburl + ']'));
-
-    this.db.transaction(function(client, callback) {
-        func(client, function () {
-            results = arguments;
-            callback.apply(null, arguments);
-        });
-    }, cb);
+    this._db = pgb.configure(dburl);
 };
 
 // (FOR TESTING) THIS WILL EMPTY ALL TABLES, USE WITH CARE !!!
@@ -39,7 +26,7 @@ DB.prototype.clearall = function(cb) {
     'video_session','wifi_stats',
     'users','sessions','pcap','pcap_file','files','devices'];
 
-    this.db.transaction(function(client, callback) {
+    this._db.transaction(function(client, callback) {
         var loop = function() {
             if (tables.length>0) {
                 client.delete(tables.shift()).run(function(err,res) {
@@ -57,31 +44,37 @@ DB.prototype.clearall = function(cb) {
 //--- highlevel funcs ---
 
 DB.prototype.insert = function(table, rowdata, cb) {
-    if (!this.db) 
+    if (!this._db) 
         return cb(new Error('No db connection [' + this.dburl + ']'));
-    this.db.insert(table, rowdata).returning('*').row(cb);     
+    this._db.insert(table, rowdata).returning('*').row(cb);     
 }
 
 DB.prototype.update = function(table, newdata, filter, cb) {
-    if (!this.db) 
+    if (!this._db) 
         return cb(new Error('No db connection [' + this.dburl + ']'));
-    this.db.update(table, newdata).where(filter).run(cb);     
+    this._db.update(table, newdata).where(filter).run(cb);     
+}
+
+DB.prototype.delte = function(table, filter, cb) {
+    if (!this._db) 
+        return cb(new Error('No db connection [' + this.dburl + ']'));
+    this._db.delete(table).where(filter).run(cb);     
 }
 
 DB.prototype.select = function(table, filter, cb) {
-    if (!this.db) 
+    if (!this._db) 
         return cb(new Error('No db connection [' + this.dburl + ']'));
     if (filter)
-        this.db.select('*').from(table).where(filter).rows(cb);     
+        this._db.select('*').from(table).where(filter).rows(cb);     
     else
-        this.db.select('*').from(table).rows(cb);     
+        this._db.select('*').from(table).rows(cb);     
 }
 
 DB.prototype.getOrInsert = function(table, row, cb) {
-    if (!this.db) 
+    if (!this._db) 
         return cb(new Error('No db connection [' + this.dburl + ']'));
 
-    this.db.transaction(function(client, callback) {
+    this._db.transaction(function(client, callback) {
         async.waterfall([
             client.select('*').from(table).where(row).run,
             function(res, callback) {
@@ -101,11 +94,11 @@ DB.prototype.getOrInsert = function(table, row, cb) {
 };
 
 DB.prototype.insertOrUpdateFile = function(file, cb) {
-    if (!this.db) 
+    if (!this._db) 
         return cb(new Error('No db connection [' + this.dburl + ']'));
     var that = this;
 
-    this.db.transaction(function(client, callback) {
+    this._db.transaction(function(client, callback) {
 
         var filter = { 
             device_id : file.device_id, 

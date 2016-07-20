@@ -15,6 +15,7 @@ services:
       - back-tier
     environment:
      NODE_ENV: development
+     DEBUG: hostview
      PROCESS_REDIS: redis://redis:6379
      PROCESS_DB: postgres://hostview:h0stvi3w@postgres/hostview
      PROCESS_WATCH: 'yes'
