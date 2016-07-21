@@ -55,7 +55,7 @@ DB.prototype.update = function(table, newdata, filter, cb) {
     this._db.update(table, newdata).where(filter).run(cb);     
 }
 
-DB.prototype.delte = function(table, filter, cb) {
+DB.prototype.delete = function(table, filter, cb) {
     if (!this._db) 
         return cb(new Error('No db connection [' + this.dburl + ']'));
     this._db.delete(table).where(filter).run(cb);     

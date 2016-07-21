@@ -63,6 +63,7 @@ module.exports.process = function(file, db, config, cb) {
 
         var lastfilenum = -1;
         var fileinfos = [];
+        var intransaction = false;
 
         files.forEach(function(item) {
             var finfo = getinfo(item);
@@ -109,6 +110,13 @@ module.exports.process = function(file, db, config, cb) {
             },
 
             function(callback) {
+                db._db.raw('BEGIN;', []).run(function(err, res) {
+                    intransaction = !err;
+                    callback(err);
+                });
+            },
+
+            function(callback) {
                 debug('pcap');
                 var isql = `INSERT INTO pcap(
                     connection_id,
@@ -127,7 +135,6 @@ module.exports.process = function(file, db, config, cb) {
 
                 debug('insert', params);
                 db._db.raw(isql, params).run(function(err, res) {
-                    debug(res, err);
                     callback(err);
                 });
             }, 
@@ -164,7 +171,6 @@ module.exports.process = function(file, db, config, cb) {
                             ];
                             debug('insert', params);
                             db._db.raw(isql, params).run(function(err, res) {
-                                debug(res, err);
                                 if (err) return callback(err);
                                 process.nextTick(loop);
                             }); 
@@ -204,21 +210,35 @@ module.exports.process = function(file, db, config, cb) {
             }
         ], 
         function(err) {
-            // make sure we never leave stuff at tmp
-            var p = '/tmp/'+file.device_id+'/'+finfo.session_ts+"_"+finfo.conn_ts+"*"+finfo.adapter+'*pcap*';
-            glob(p, function(err2, files) {
-                if (!err2) {
-                    try {
-                        files.forEach(function(item) {
-                            debug('remove ' + item);
-                            fs.unlinkSync(item);
-                        });
-                    } catch (err) {
+            debug('done, transaction active ' + intransaction, err);
+
+            var tmp = function() {
+                // make sure we never leave stuff at tmp
+                var p = '/tmp/'+file.device_id+'/'+finfo.session_ts+"_"+finfo.conn_ts+"*"+finfo.adapter+'*pcap*';
+                glob(p, function(err2, files) {
+                    if (!err2) {
+                        try {
+                            files.forEach(function(item) {
+                                debug('remove ' + item);
+                                fs.unlinkSync(item);
+                            });
+                        } catch (err) {
+                        }
                     }
-                }
-                // return pcap handling success/failure
-                return cb(err);
-            });
+                    // return pcap handling success/failure
+                    return cb(err);                
+                });
+            };
+            if (intransaction) {
+                if (err)
+                    db._db.raw('ROLLBACK;', []).run(tmp);
+                else
+                    db._db.raw('COMMIT;', []).run(tmp);                    
+            } else {
+                tmp();
+            }
+
+
         }); // waterfall
     }); // glob
 }
