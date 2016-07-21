@@ -36,19 +36,21 @@ To (re)build the app image, use Docker Compose:
 
     docker-compose -f dev.yml build
 
-To run the app, use Docker Compose (will start required Redis + Postgresql + App containers):
+To run the containers, use Docker Compose (will start required Redis + Postgresql + App containers):
 
     docker-compose -f dev.yml up
  
+Note, the first boot is long + verbose as the Postgresql container initialzes the database.
+
 To get a shell access to the app container (will not start the app) with data mounted on the host, do:
 
     docker run --rm -it -e NODE_ENV=development hostview/processing /bin/bash
 
 To find out more about running containers, networks etc:
 
-    $ docker ps -a                  // list all containers
-    $ docker network ls             // list networks
-    $ docker start <container id>   // start existing container
+    $ docker ps -a                       // list all containers
+    $ docker network ls                  // list networks
+    $ docker start/stop <container id>   // start/stop existing container
 
 To connect to the development database container:
 
@@ -61,13 +63,13 @@ The code uses 'debug' library, enable debug logs with environment variable DEBUG
 
 To run all the unit tests (in ./app/test), first make sure a postgres + redis are running somewhere (e.g. in a container from above). NOTE: the tests will clear all data in the DB so do not run the tests againts a production DB !!!
 
-Then run the processing app container with the test flag:
+Then run the unit tests:
 
-    $ docker run --rm --net=<hostview back-tier> --link <postgres container name>:postgres -e DEBUG=hostview -e NODE_ENV=development -e TEST=1 -e PROCESS_DB=postgres://hostview:h0stvi3w@postgres/hostview hostview/processing
+    $ docker run --rm --net=<hostview back-tier> --link <postgres container name>:postgres -v $PWD/app:/app -v /app/node_modules -e DEBUG=hostview -e NODE_ENV=development -e TEST=1 -e PROCESS_DB=postgres://hostview:h0stvi3w@postgres/hostview hostview/processing
 
 
 ### Production
 
-To run the app, use Docker Compose (will start Redis + App containers, with on host Postgresql):
+To run the app in production mode, use Docker Compose (will start Redis + App containers, with on host Postgresql):
 
     PROCESS_DB=postgres://<user>:<password>@ucn.inria.fr/hostview2016 docker-compose -f prod.yml -d up

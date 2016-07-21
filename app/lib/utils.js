@@ -38,7 +38,7 @@ module.exports.uncompress2 = function(src, dst, cb) {
             { cwd: dst },
             function(err, stdout, stderr) {
                 if (err) return cb(err);
-                return cb(undefined));
+                return cb(undefined);
             });
     } catch (err) {
         cb(err);

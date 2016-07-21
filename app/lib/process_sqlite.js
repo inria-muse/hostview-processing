@@ -38,7 +38,7 @@ module.exports.process = function(file, db, cb) {
 
         // fetch data from the sqlite
         file.db.each(sql, function(err, row) {
-            if (err) { 
+            if (e||err) { 
                 // we can't abort the .each(), so just record the error
                 // -- alternative is to do .all() but .each avoids reading
                 // all the data in memory (some tables can be huge !!)
@@ -56,6 +56,7 @@ module.exports.process = function(file, db, cb) {
 
             // add to the backend table
             client.insert(dsttable, o).run(function(err, res) { 
+                if (!e && err) debug('readloop insert fail: ' + dsttable, err);
                 e = e||err; 
             });
 
@@ -66,6 +67,13 @@ module.exports.process = function(file, db, cb) {
             callback(e);
         });            
     };
+
+    // another helper to convert empty strings to nulls
+    var getstr = function(row, col) {
+        if (!row[col] || row[col].trim()=='')
+            return null;
+        return row[col].trim();
+    }
 
     // the processing goes as follows:
     //
@@ -144,7 +152,7 @@ module.exports.process = function(file, db, cb) {
             readloop(db._db, sql, 'wifi_stats', function(row) {
                 return {
                     session_id: session.id,
-                    guid: row.guid,
+                    guid: getstr(row,'guid'),
                     t_speed: row.tspeed,
                     r_speed: row.rspeed,
                     signal: row.signal,
@@ -162,7 +170,7 @@ module.exports.process = function(file, db, cb) {
                 return {
                     session_id: session.id,
                     pid: row.pid,
-                    name: row.name,
+                    name: getstr(row, 'name'),
                     memory: row.memory,
                     cpu: row.cpu,
                     logged_at: new Date(row.timestamp)
@@ -190,10 +198,10 @@ module.exports.process = function(file, db, cb) {
                 return {
                     session_id: session.id,
                     pid: row.pid,
-                    name: row.name,
+                    name: getstr(row,'name'),
                     protocol: row.protocol,
-                    source_ip: row.srcip,
-                    destination_ip: row.destip,
+                    source_ip: getstr(row, 'srcip'),
+                    destination_ip: getstr(row, 'destip'),
                     source_port: row.srcport,
                     destination_port: row.destport,
                     state: row.state,
@@ -210,7 +218,7 @@ module.exports.process = function(file, db, cb) {
                     session_id: session.id,
                     device: row.device,
                     pid: row.pid,
-                    name: row.name,
+                    name: getstr(row,'name'),
                     logged_at: new Date(row.timestamp)
                 };
             }, callback);
@@ -244,9 +252,9 @@ module.exports.process = function(file, db, cb) {
             readloop(db._db, sql, 'netlabels', function(row) {
                 return {
                     session_id: session.id,
-                    guid: row.guid,
-                    gateway: row.gateway,
-                    label: row.label,
+                    guid: getstr(row,'guid'),
+                    gateway: getstr(row,'gateway'),
+                    label: getstr(row,'label'),
                     logged_at: new Date(row.timestamp)
                 };
             }, callback);
@@ -258,8 +266,8 @@ module.exports.process = function(file, db, cb) {
             readloop(db._db, sql, 'browser_activity', function(row) {
                 return {
                     session_id: session.id,
-                    browser: row.browser,
-                    location: row.location,
+                    browser: getstr(row,'browser'),
+                    location: getstr(row,'location'),
                     logged_at: new Date(row.timestamp)
                 };
             }, callback);
@@ -283,8 +291,8 @@ module.exports.process = function(file, db, cb) {
                     session_id: session.id,
                     user_name: row.user,
                     pid: row.pid,
-                    name: row.name,
-                    description: row.description,
+                    name: getstr(row,'name'),
+                    description: getstr(row,'description'),
                     fullscreen: row.fullscreen,
                     idle: row.idle,
                     logged_at: new Date(row.timestamp)
@@ -359,22 +367,22 @@ module.exports.process = function(file, db, cb) {
                         location_id: lid,
                         started_at: new Date(row.started_at),
                         ended_at: (row.ended_at ? new Date(row.ended_at) : session.ended_at),
-                        guid: row.guid,
-                        friendly_name: row.friendlyname,
-                        description: row.description,
-                        dns_suffix: row.dnssuffix,
-                        mac: row.mac,
+                        guid: getstr(row,'guid'),
+                        friendly_name: getstr(row,'row.friendlyname'),
+                        description: getstr(row,'row.description'),
+                        dns_suffix: getstr(row,'dnssuffix'),
+                        mac: getstr(row,'mac'),
                         ips: row.ips.split(','),
                         gateways: row.gateways.split(','),
                         dnses: row.dnses.split(','),
                         t_speed: row.tspeed,
                         r_speed: row.rspeed,
                         wireless: row.wireless,
-                        profile: row.profile,
-                        ssid: row.ssid,
-                        bssid: row.bssid,
-                        bssid_type: row.bssidtype,
-                        phy_type: row.phytype,
+                        profile: getstr(row,'profile'),
+                        ssid: getstr(row,'ssid'),
+                        bssid: getstr(row,'bssid'),
+                        bssid_type: getstr(row,'bssidtype'),
+                        phy_type: getstr(row,'phytype'),
                         phy_index: row.phyindex,
                         channel: row.channel
                     };
@@ -387,14 +395,14 @@ module.exports.process = function(file, db, cb) {
                 if (row.public_ip) {
                     // insert/get the location first
                     var l = {
-                        public_ip: row.public_ip.trim(),
-                        reverse_dns: row.reverse_dns.trim(),
-                        asn_number: row.asnumber.trim(),
-                        asn_name: row.asname.trim(),
-                        country_code: row.countryCode.trim(),
-                        city: row.city.trim(),
-                        latitude: row.lat.trim(),
-                        longitude: row.lon.trim()          
+                        public_ip: getstr(row,'public_ip'),
+                        reverse_dns: getstr(row,'reverse_dns'),
+                        asn_number: getstr(row,'asnumber'),
+                        asn_name: getstr(row,'asname'),
+                        country_code: getstr(row,'countryCode'),
+                        city: getstr(row,'city'),
+                        latitude: getstr(row,'lat'),
+                        longitude: getstr(row,'lon') 
                     };
 
                     db._db.select('*').from('locations')
@@ -500,12 +508,6 @@ module.exports.process = function(file, db, cb) {
                        $13
                 FROM connections c WHERE c.started_at = $14;`;
 
-            var getv = function(row, col) {
-                if (!row[col] || row[col]=='')
-                    return null;
-                return row[col];
-            }
-
             var e = null;
             var sql=`SELECT * FROM http ORDER BY timestamp ASC`;
 
@@ -516,18 +518,18 @@ module.exports.process = function(file, db, cb) {
                 };
 
                 var params = [
-                    getv(row,'httpverb'), 
-                    getv(row,'httpverbparam'), 
-                    getv(row,'httpstatuscode'),
-                    getv(row,'httphost'), 
-                    getv(row,'referer'), 
-                    getv(row,'contenttype'), 
-                    getv(row,'contentlength'),
-                    getv(row,'protocol'), 
-                    getv(row,'srcip'), 
-                    getv(row,'destip'), 
-                    getv(row,'srcport'), 
-                    getv(row,'destport'),
+                    getstr(row,'httpverb'), 
+                    getstr(row,'httpverbparam'), 
+                    getstr(row,'httpstatuscode'),
+                    getstr(row,'httphost'), 
+                    getstr(row,'referer'), 
+                    getstr(row,'contenttype'), 
+                    getstr(row,'contentlength'),
+                    getstr(row,'protocol'), 
+                    getstr(row,'srcip'), 
+                    getstr(row,'destip'), 
+                    getstr(row,'srcport'), 
+                    getstr(row,'destport'),
                     new Date(row.timestamp), 
                     new Date(row.connstart)
                 ];
