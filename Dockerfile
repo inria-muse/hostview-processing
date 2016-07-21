@@ -1,8 +1,8 @@
 # current stable LTS on top of debian image
 FROM node:4.4.4-wheezy
 
-# hostview uses special archiver
-RUN apt-get update && apt-get -y install dtrx
+# install processing tools
+RUN apt-get update && apt-get -y install dtrx libtrace-tools
 
 # create non-root user account
 RUN groupadd -r nodeuser && useradd -r -g nodeuser nodeuser

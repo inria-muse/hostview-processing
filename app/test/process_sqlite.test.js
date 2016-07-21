@@ -54,6 +54,7 @@ describe('process_sqlite', function() {
                 db._db.select('*').from('sessions').row(function(err, row) {
                     assert.equal(!err, true);
                     assert.equal(row!=undefined, true);
+                    // TODO: should really test for other tables too .. 
                     done();
                 });
             });

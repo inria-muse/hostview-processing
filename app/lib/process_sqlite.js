@@ -426,8 +426,8 @@ module.exports.process = function(file, db, cb) {
         function(res, callback) {
             debug('connectivity');
 
-            // FIXME:: this is really slow query
-            // do as with activity !!!
+            // FIXME:: this is really slow on sqlite - there's no indexes
+            // or nothing so takes forever, do as with activity !!!
 
             var e = null;
             var sql=`SELECT 
