@@ -56,6 +56,10 @@ module.exports.process = function(file, db, cb) {
 
             // add to the backend table
             client.insert(dsttable, o).run(function(err, res) { 
+                // we can't abort the .each(), so just record the error
+                // -- alternative is to do .all() but .each avoids reading
+                // all the data in memory (some tables can be huge !!)
+                // TODO: does this really work or there's some race conditions here ?
                 if (!e && err) debug('readloop insert fail: ' + dsttable, err);
                 e = e||err; 
             });
@@ -70,7 +74,7 @@ module.exports.process = function(file, db, cb) {
 
     // another helper to convert empty strings to nulls
     var getstr = function(row, col) {
-        if (!row[col] || row[col].trim()=='')
+        if (!row[col] || row[col]=='' || row[col].trim()=='')
             return null;
         return row[col].trim();
     }
@@ -278,18 +282,20 @@ module.exports.process = function(file, db, cb) {
 
             // reading one ahead so we can log the finish as well
             var prev = undefined;
-
+            var rows = []
             var e = null;
+
             var sql=`SELECT * FROM activity ORDER BY timestamp ASC`;
             file.db.each(sql, function(err, row) {
-                if (err) { 
+                if (e||err) { 
                     e = e||err; 
+                    prev = undefined;
                     return; 
                 };
 
                 var o = {
                     session_id: session.id,
-                    user_name: row.user,
+                    user_name: getstr(row,'user'),
                     pid: row.pid,
                     name: getstr(row,'name'),
                     description: getstr(row,'description'),
@@ -301,27 +307,33 @@ module.exports.process = function(file, db, cb) {
 
                 if (prev) {
                     // ends when the new event happens
-                    prev.finished_at = o.logged_at;
-                    db._db.insert('activities', prev).run(function(err, res) {
-                        e = e||err;
-                        prev = o;
-                    });
+                    prev.finished_at = new Date(row.timestamp);
+                    rows.push(prev);
                 }
+                prev = o;
+
             }, function(err) {
                 // .each complete
                 e = e||err;
-                if (e) return callback(e); // something failed during .each
-
                 if (prev) {
                     // insert the last activity event
                     prev.finished_at = session.ended_at;
-                    db._db.insert('activities', prev).run(function(err, res) {
-                        e = e||err;
-                        callback(e);
-                    });
-                } else {
-                    callback(null);
+                    rows.push(prev);
                 }
+
+                debug('activies read, found ' + rows.length, e);
+                if (e) return callback(e); // something failed during .each
+
+                // now add all rows
+                var loop = function() {
+                    if (rows.length == 0) return callback(null); // done
+                    var a = rows.shift();
+                    db._db.insert('activities', a).run(function(err, res) {
+                        if (err) return callback(err);
+                        loop();
+                    });                     
+                };
+                loop();
             });
         },
 
@@ -525,11 +537,11 @@ module.exports.process = function(file, db, cb) {
                     getstr(row,'referer'), 
                     getstr(row,'contenttype'), 
                     getstr(row,'contentlength'),
-                    getstr(row,'protocol'), 
+                    row['protocol'], 
                     getstr(row,'srcip'), 
                     getstr(row,'destip'), 
-                    getstr(row,'srcport'), 
-                    getstr(row,'destport'),
+                    row['srcport'], 
+                    row['destport'],
                     new Date(row.timestamp), 
                     new Date(row.connstart)
                 ];
@@ -543,7 +555,10 @@ module.exports.process = function(file, db, cb) {
                 e = e||err;
                 callback(e);
             });
-        },
+        }        
+        /*,
+
+        TODO: these are working but do we need these ?
 
         function(callback) {                
             debug('activity_io');
@@ -643,7 +658,7 @@ module.exports.process = function(file, db, cb) {
 
             loop(from);
         }
-
+        */
     ], 
     function(err) {
         // if we receive error here, something went wrong above ...
@@ -652,7 +667,7 @@ module.exports.process = function(file, db, cb) {
                 if (err) {
                     debug('failed to process session ' + session.id, err); 
                     if (session.id)
-                        db._db.delete('session').where({ id : session.id }).run(callback);
+                        db._db.delete('sessions').where({ id : session.id }).run(callback);
                 } else {
                     debug('session inserted ' + session.id);             
                     callback(null, null);
