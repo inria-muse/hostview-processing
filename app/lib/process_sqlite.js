@@ -276,7 +276,90 @@ module.exports.process = function(file, db, cb) {
                 };
             }, callback);
         },
+
+        function(callback) {
+            debug('esm');
+            var sql=`SELECT * FROM esm ORDER BY timestamp ASC`;
+            readloop(db._db, sql, 'surveys', function(row) {
+                return {
+                    session_id: session.id,
+                    ondemand: row.ondemand,
+                    qoe_score: row.qoe_score,
+                    duration: row.duration,
+                    started_at: new Date(row.timestamp),
+                    ended_at: new Date(row.timestamp+row.duration)
+                };
+            }, callback);
+        },
         
+        function(callback) {
+            debug('esm activity');
+
+            var isql = `INSERT INTO survey_activity_tags(
+                survey_id, process_name, process_desc, tags)
+                SELECT s.id,$1,$2,$3
+                FROM surveys s WHERE s.started_at = $4;`;
+
+            var e = null;
+            var sql=`SELECT * FROM esm_activity_tags ORDER BY timestamp ASC`;
+            file.db.each(sql, function(err, row) {
+                if (e||err) { 
+                    e = e||err; 
+                    return; 
+                };
+
+                var params = [
+                    row.appname, 
+                    row.description, 
+                    row.tags.split(','), 
+                    new Date(row.timestamp)
+                ];
+
+                db._db.raw(isql, params).run(function(err, res) {
+                    e = e||err; 
+                }); 
+
+            }, function(err) {
+                // .each complete
+                e = e||err;
+                callback(e);
+            });
+        },
+        
+        function(callback) {
+            debug('esm problems');
+
+            var isql = `INSERT INTO survey_problem_tags(
+                survey_id, process_name, process_desc, tags)
+                SELECT s.id,$1,$2,$3
+                FROM surveys s WHERE s.started_at = $4;`;
+
+            var e = null;
+            var sql=`SELECT * FROM esm_problem_tags ORDER BY timestamp ASC`;
+            file.db.each(sql, function(err, row) {
+                if (e||err) { 
+                    e = e||err; 
+                    return; 
+                };
+
+                var params = [
+                    row.appname, 
+                    row.description, 
+                    row.tags.split(','), 
+                    new Date(row.timestamp)
+                ];
+
+                db._db.raw(isql, params).run(function(err, res) {
+                    e = e||err; 
+                }); 
+
+            }, function(err) {
+                // .each complete
+                e = e||err;
+                callback(e);
+            });
+        },
+
         function(callback) {
             debug('activity');
 
@@ -342,6 +425,10 @@ module.exports.process = function(file, db, cb) {
 
         function(res, callback) {
             debug('connectivity');
+
+            // FIXME:: this is really slow query
+            // do as with activity !!!
+
             var e = null;
             var sql=`SELECT 
                         a.*,
@@ -368,7 +455,7 @@ module.exports.process = function(file, db, cb) {
                     ORDER BY a.mac ASC, started_at ASC`;
 
             file.db.each(sql, function(err, row) {
-                if (err) { 
+                if (e||err) { 
                     e = e||err; 
                     return; 
                 };
@@ -463,7 +550,7 @@ module.exports.process = function(file, db, cb) {
             var e = null;
             var sql=`SELECT * FROM dns ORDER BY timestamp ASC`;
             file.db.each(sql, function(err, row) {
-                if (err) { 
+                if (e||err) { 
                     e = e||err; 
                     return; 
                 };
