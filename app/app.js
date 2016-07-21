@@ -50,9 +50,11 @@ var kue = require('kue')
   // Global configuration
   var datadir = process.env.PROCESS_DATA_DIR||'/tmp';
   var config = {
+    data_dir: datadir,
     incoming_dir: datadir+'/incoming',                // incoming files
     processed_dir: datadir+'/processed',              // processed files
     failed_dir: datadir+'/failed',                    // failed files
+    pcap_dir: datadir+'/pcapparts',                   // partial pcap files
     enable_watch: getbool('PROCESS_WATCH',false),     // monitor incoming files ?
     retry: getint('PROCESS_RETRY',3),                 // number of retries
     retry_delay: getint('PROCESS_RETRY_DELAY',3600),  // delay between retries (s)
@@ -71,6 +73,7 @@ var kue = require('kue')
     fs.ensureDirSync(config.incoming_dir);
     fs.ensureDirSync(config.processed_dir);
     fs.ensureDirSync(config.failed_dir);
+    fs.ensureDirSync(config.pcap_dir);
 
   } catch (err) {
     console.error(err);
@@ -268,7 +271,7 @@ var kue = require('kue')
 
             } else if (job.data.filetype == 'pcap') {
               console.log('process_pcap');
-              process_pcap.process(file, db, config.processed_dir, processdone);
+              process_pcap.process(file, db, config, processdone);
 
             } else if (job.data.filetype == 'json') {
               console.log('process_json');

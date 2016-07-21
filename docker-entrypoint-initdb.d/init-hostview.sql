@@ -511,6 +511,8 @@ CREATE TABLE pcap (
     connection_id bigint NOT NULL,
     status character varying(100),
     error_info character varying(260),
+    folder character varying(260),
+    basename character varying(260),
     created_at timestamp without time zone DEFAULT now(),
     updated_at timestamp without time zone DEFAULT now()
 );

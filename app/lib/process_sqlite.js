@@ -3,9 +3,9 @@
  */
 var fs = require('fs-extra')
     , debug = require('debug')('hostview')
-    , utils = require('./utils')
     , async = require('async')
-    , sqlite = require('sqlite3');
+    , sqlite = require('sqlite3')
+    , utils = require('./utils');
 
 /** 
  *  Process a single sqlite file from Hostview.
@@ -76,10 +76,6 @@ module.exports.process = function(file, db, cb) {
     //   5) process other derived tables and data
     //   6) cleanup temp file
 
-    // running the processing in series (there are parts that could
-    // run in parallel I guess - TODO), if any of the steps fail,
-    // the whole processing stops there and the transaction is rolled back
-
     async.waterfall([
 
         function(callback) {
@@ -94,13 +90,7 @@ module.exports.process = function(file, db, cb) {
             file.db = new sqlite.Database(path, sqlite.OPEN_READONLY, callback);
         },
 
-        db._db.raw('BEGIN;', []).run,
-
-        function(res, callback) {        
-            db._db.raw('SET CONSTRAINTS ALL DEFERRED;', []).run(callback);
-        },
-
-        function(res, callback) {
+        function(callback) {
             // get session start event (there should only be one)
             debug('select session start');
             sql=`SELECT timestamp started_at, event start_event
@@ -180,7 +170,6 @@ module.exports.process = function(file, db, cb) {
             }, callback);
         },
 
-        /*
         function(callback) {
             debug('powerstates');
             var sql=`SELECT * FROM powerstate ORDER BY timestamp ASC`;
@@ -300,6 +289,7 @@ module.exports.process = function(file, db, cb) {
                     idle: row.idle,
                     logged_at: new Date(row.timestamp)
                 };
+                session.ended_at = utils.datemax(session.ended_at, o.logged_at);
 
                 if (prev) {
                     // ends when the new event happens
@@ -327,7 +317,10 @@ module.exports.process = function(file, db, cb) {
             });
         },
 
-        function(callback) {
+        db._db.update('sessions', { ended_at : session.ended_at })
+            .where({ id : session.id }).run,
+
+        function(res, callback) {
             debug('connectivity');
             var e = null;
             var sql=`SELECT 
@@ -548,14 +541,122 @@ module.exports.process = function(file, db, cb) {
                 e = e||err;
                 callback(e);
             });
-        },*/
+        },
 
-        db._db.raw('COMMIT;', []).run
+        function(callback) {                
+            debug('activity_io');
+
+            // Count foreground/background io for activities (running apps)
+            //
+            // FIXME: interpretation of the count really depends on the polling
+            // interval, it would make more sense to store the real duration 
+            // instead no ... ??
+            // 
+            var sql = `INSERT INTO activity_io
+                SELECT 
+                    a.id, 
+                    a.session_id,
+                    a.name,
+                    a.description, 
+                    a.idle, 
+                    a.pid, 
+                    a.logged_at, 
+                    a.finished_at, 
+                    COUNT(io.logged_at)
+                FROM activities a 
+                LEFT JOIN io 
+                ON io.logged_at BETWEEN a.logged_at AND a.finished_at
+                    AND io.pid = a.pid
+                    AND io.name = a.name
+                    AND io.session_id = a.session_id
+                WHERE a.session_id = $1
+                GROUP BY a.id
+                ORDER BY a.id;`;
+
+            db._db.raw(sql, [session.id]).run(callback); 
+        },
+
+        function(res, callback) {
+            debug('processes_running');
+
+            // Fill the processes_running table
+            // TODO: what's with the intervals in the queries .. ? 
+            var sql = `INSERT INTO processes_running
+                SELECT
+                    $1::integer as device_id,
+                    $2::integer as session_id,
+                    p.dname,
+                    (
+                        SELECT 
+                            COUNT(*)
+                        FROM
+                        (
+                            SELECT 1 AS count
+                            FROM processes
+                            WHERE name = p.dname
+                                AND session_id = $2::integer
+                                AND logged_at BETWEEN $3::timestamp AND $4::timestamp
+                            GROUP BY date_trunc('minute',logged_at + interval '30 seconds')
+                        ) sq
+                    )::integer AS process_running,
+                    (
+                        SELECT
+                            EXTRACT (
+                                EPOCH FROM (
+                                    LEAST(date_trunc('minute',ended_at + interval '30 seconds'), $4::timestamp) 
+                                    - 
+                                    GREATEST(date_trunc('minute',started_at + interval '30 seconds'), $3::timestamp)
+                                )
+                            )/60
+                        FROM sessions 
+                        WHERE id = $2::integer
+                    ) AS session_running,
+                    $3::timestamp as start_at,
+                    $4::timestamp as end_at
+                FROM(
+                    SELECT
+                    DISTINCT name AS dname
+                    FROM processes
+                    WHERE session_id = $2::integer
+                ) p`;
+
+            // run the above query for 1h bins from session start to end
+            var bin = 60 * 60 * 1000;
+            var from = Math.floor(session.started_at.getTime()/bin)*bin;
+            var to   = Math.floor(session.ended_at.getTime()/bin+1)*bin;
+
+            var loop = function(d) {
+                if (d>=to) return callback(null);
+
+                var args = [session.device_id, 
+                            session.id, 
+                            new Date(d), 
+                            new Date(d+bin)];
+
+                db._db.raw(sql, args).run(function(err,res) { 
+                    if (err) return callback(err); // stop on error
+                    process.nextTick(loop,d+bin);
+                });
+            };
+
+            loop(from);
+        }
+
     ], 
     function(err) {
-        // if we receive error here, the transaction failed
+        // if we receive error here, something went wrong above ...
         async.waterfall([
             function(callback) {
+                if (err) {
+                    debug('failed to process session ' + session.id, err); 
+                    if (session.id)
+                        db._db.delete('session').where({ id : session.id }).run(callback);
+                } else {
+                    debug('session inserted ' + session.id);             
+                    callback(null, null);
+                }
+            },
+            function(res, callback) {
                 if (file.db) // sqlite conn
                     file.db.close(function() { callback(null); });
                 else
@@ -567,152 +668,10 @@ module.exports.process = function(file, db, cb) {
                 else
                     callback(null);
             },
-            function(callback) {
-                if (err) {
-                    debug('rollback transaction', err); 
-                    db._db.raw('ROLLBACK;', []).run(callback);
-                } else {
-                    debug('raw data transaction ok');             
-                    callback(null);
-                }
-            }
         ], function() {
-            return cb(err);
-            /*
-            if (!err) {
-                debug('do processed tables');  
+            // return the original error (if any)
+            return cb(err); 
 
-                // TODO: do we need these ??
-                // some more post processing after the raw data is inserted
-                db._db.transaction(function(client, callback) {
-                    async.waterfall([
-                        function(callback) {                
-                            debug('activity_io');
-
-                            // Count foreground/background io for activities (running apps)
-                            //
-                            // FIXME: interpretation of the count really depends on the polling
-                            // interval, it would make more sense to store the real duration 
-                            // instead no ... ??
-                            // 
-                            var sql = `INSERT INTO activity_io
-                                SELECT 
-                                    a.id, 
-                                    a.session_id,
-                                    a.name,
-                                    a.description, 
-                                    a.idle, 
-                                    a.pid, 
-                                    a.logged_at, 
-                                    a.finished_at, 
-                                    COUNT(io.logged_at)
-                                FROM activities a 
-                                LEFT JOIN io 
-                                ON io.logged_at BETWEEN a.logged_at AND a.finished_at
-                                    AND io.pid = a.pid
-                                    AND io.name = a.name
-                                    AND io.session_id = a.session_id
-                                WHERE a.session_id = $1
-                                GROUP BY a.id
-                                ORDER BY a.id;`;
-
-                            client.raw(sql, [session.id]).run(callback); 
-                        },
-
-                        function(res, callback) {
-                            debug('processes_running');
-
-                            // Fill the processes_running table
-                            // TODO: what's with the intervals in the queries .. ? 
-                            var sql = `INSERT INTO processes_running
-                                SELECT
-                                    $1::integer as device_id,
-                                    $2::integer as session_id,
-                                    p.dname,
-                                    (
-                                        SELECT 
-                                            COUNT(*)
-                                        FROM
-                                        (
-                                            SELECT 1 AS count
-                                            FROM processes
-                                            WHERE name = p.dname
-                                                AND session_id = $2::integer
-                                                AND logged_at BETWEEN $3::timestamp AND $4::timestamp
-                                            GROUP BY date_trunc('minute',logged_at + interval '30 seconds')
-                                        ) sq
-                                    )::integer AS process_running,
-                                    (
-                                        SELECT
-                                            EXTRACT (
-                                                EPOCH FROM (
-                                                    LEAST(date_trunc('minute',ended_at + interval '30 seconds'), $4::timestamp) 
-                                                    - 
-                                                    GREATEST(date_trunc('minute',started_at + interval '30 seconds'), $3::timestamp)
-                                                )
-                                            )/60
-                                        FROM sessions 
-                                        WHERE id = $2::integer
-                                    ) AS session_running,
-                                    $3::timestamp as start_at,
-                                    $4::timestamp as end_at
-                                FROM(
-                                    SELECT
-                                    DISTINCT name AS dname
-                                    FROM processes
-                                    WHERE session_id = $2::integer
-                                ) p`;
-
-                            // run the above query for 1h bins from session start to end
-                            var bin = 60 * 60 * 1000;
-                            var from = Math.floor(session.started_at.getTime()/bin)*bin;
-                            var to   = Math.floor(session.ended_at.getTime()/bin+1)*bin;
-
-                            var loop = function(d) {
-                                if (d>=to) return callback(null);
-
-                                var args = [session.device_id, 
-                                            session.id, 
-                                            new Date(d), 
-                                            new Date(d+bin)];
-
-                                client.raw(sql, args).run(function(err,res) { 
-                                    if (err) return callback(err); // stop on error
-                                    process.nextTick(loop,d+bin);
-                                });
-                            };
-
-                            loop(from);
-                        },
-
-                        client.update('sessions', { ended_at : session.ended_at })
-                            .where({ id : session.id }).run
-
-                    ], callback); 
-                    // end waterfall - the callback will commit the transaction 
-                    // or rollback upon failures
-
-                }, function(err2) {
-                    // handle transaction succes / failure
-                    if (err2) {
-                        debug('processing transaction failed', err2); 
-
-                        // this will cascade delete everything
-                        db.delete('sessions', { id : session.id }, function() {
-                            return cb(err2);
-                        });
-
-                    } else {
-                        // all good !
-                        debug('processing transaction ok');
-                        return cb(null);
-                    }
-                });
-
-            } else {
-                // main transaction failed
-                return cb(err);
-            }*/
         }); // cleanup waterfall
     }); // main watefall
 }; //process
