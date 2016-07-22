@@ -1,8 +1,8 @@
 # current stable LTS on top of debian image
 FROM node:4.4.4-wheezy
 
-# install processing tools
-RUN apt-get update && apt-get -y install dtrx libtrace-tools
+# install data processing tools
+RUN apt-get update && apt-get -y install dtrx libtrace-tools python python-pip && pip install psycopg2 sqlalchemy
 
 # create non-root user account
 RUN groupadd -r nodeuser && useradd -r -g nodeuser nodeuser
@@ -18,6 +18,10 @@ RUN cd /tmp && npm install
 # create and populate the main app folder
 RUN mkdir /app && cp -a /tmp/node_modules /app && chown -R nodeuser:nodeuser /app
 COPY app /app
+
+# create and populate the python code folder
+RUN mkdir /python && chown -R nodeuser:nodeuser /python
+COPY python-src /python
 
 ENV NODE_ENV production
 

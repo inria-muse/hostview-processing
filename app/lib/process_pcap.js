@@ -28,8 +28,8 @@ var getinfo = function(p) {
 };
 
 /** Process single (merged) pcap file. */
-var pcapprocess = module.exports.pcapprocess = function(mergedfile, db, config, cb) {
-    if (!mergedfile || !db || !config)
+var pcapprocess = module.exports.pcapprocess = function(mergedfile, db, cb) {
+    if (!mergedfile || !db)
         return cb(new Error('[process_pcap] missing arguments'));
 
     // call the python script
@@ -182,7 +182,7 @@ module.exports.process = function(file, db, config, cb) {
             /*
             function(callback) {
                 // process the combined trace and insert data to the db
-                pcapprocess(mergedfile, db, config, callback);
+                pcapprocess(mergedfile, db, callback);
             },
             */
 
@@ -213,7 +213,7 @@ module.exports.process = function(file, db, config, cb) {
             debug('done, transaction active ' + intransaction, err);
 
             var tmp = function() {
-                // make sure we never leave stuff at tmp
+                // make sure we dont' leave stuff at tmp
                 var p = '/tmp/'+file.device_id+'/'+finfo.session_ts+"_"+finfo.conn_ts+"*"+finfo.adapter+'*pcap*';
                 glob(p, function(err2, files) {
                     if (!err2) {
@@ -225,10 +225,12 @@ module.exports.process = function(file, db, config, cb) {
                         } catch (err) {
                         }
                     }
-                    // return pcap handling success/failure
+
+                    // return pcap handling success/failure to the caller
                     return cb(err);                
                 });
             };
+
             if (intransaction) {
                 if (err)
                     db._db.raw('ROLLBACK;', []).run(tmp);
