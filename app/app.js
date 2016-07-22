@@ -62,7 +62,12 @@ var kue = require('kue')
     concurrency: getint('PROCESS_CONCURRENCY',5),     // num jobs / worker
     redis: process.env.PROCESS_REDIS||undefined,      // redis url (or use default)
     db: process.env.PROCESS_DB||undefined             // postgresql url (or use default)
+    tcptrace_script: '/python/main.py'                // entrypoint to tcptrace scripts
   };
+
+  // for the tcptrace processing script  
+  if (config.db)
+    config.pydb = config.db.replace('postgres://', 'postgresql+psycopg2://')
 
   try {
     // Ensure we're in the project directory, so relative paths work as expected

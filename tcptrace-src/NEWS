@@ -1,0 +1,9 @@
+tcptrace (6.6.7-2) unstable; urgency=low
+
+  * As of version 6.6.7-2, tcptrace recommends xplot-xplot.org rather
+    than gnuplot, now that the former is included with Debian.  This
+    recommendation is more consistent with the upstream developers
+    intentions.  xpl2gpl is still included for those who would prefer to
+    continue using gnuplot.
+
+ -- Noah Meyerhans <noahm@debian.org>  Sun, 08 Mar 2009 23:09:59 -0400

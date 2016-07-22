@@ -15,9 +15,12 @@ describe('process_pcap', function() {
 
     var cfg = {
         pcap_dir : '/tmp/pcapparts',
-        processed_dir : '/tmp/processed'
+        processed_dir : '/tmp/processed',
+        db: process.env.PROCESS_DB,
+        pydb: process.env.PROCESS_DB.replace('postgres://','postgresql+psycopg2://'),
+        tcptrace: '/python/tcptrace',
+        tcptrace_script : '/python/main.py'
     };
-
 
     before(function(done) {        
 
@@ -29,7 +32,7 @@ describe('process_pcap', function() {
             process.exit(1);
         }
 
-        db = new sqldb.DB(process.env.PROCESS_DB);
+        db = new sqldb.DB(cfg.db);
 
         db.clearall(function(err) {
             if (err) return done(err);

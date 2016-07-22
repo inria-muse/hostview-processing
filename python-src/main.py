@@ -13,7 +13,6 @@
 	    Date: 23/06/2013
 """
 
-
 import time, os, re, sys, subprocess, shutil, datetime
 
 from log 		import * 
@@ -108,30 +107,29 @@ class App(object):
 			tsRTT.readFromTCPTrace(filename, pcap_id, App.findFlowId))
 
 	@staticmethod
-	def CallTCPTrace(pcapfile, outdir, tcptrace):
+	def CallTCPTrace(pcapfile, outdir):
 		startTime = time.time()
-
-		nulloutput = open(os.devnull, 'w')
-
 		args = [
-			tcptrace, 
+			"tcptrace",
 			"-nlj", 
 			"--output_dir="+outdir, 
 			"--output_prefix=ts", 
 			pcapfile
 		]
+		log.info(' '.join(args))
 
-		log.info(tcptrace + ' '.join(args))
+		process = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+		(out,err) = process.communicate()
 
-		process = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=nulloutput)
-		tcptraceout = process.communicate()[0]
-
-		log.info("TCPTRACE OK (took %.3fs)" % (time.time() - startTime))
-
-		return tcptraceout
+		log.info("TCPTRACE %s[%d] (took %.3fs)" % (('ok' if (err==None) else 'failed'), process.returncode, (time.time() - startTime)))
+		log.info(out)
+		if (process.returncode!=0):
+			log.error(err)
+			return (None, err)
+		return (out,err)
 
 	@staticmethod
-	def process(pcapfile, tcptrace):
+	def process(pcapfile):
 		"""
 		Processing entry point.
 		"""
@@ -159,7 +157,10 @@ class App(object):
 			pcap.status = 'processing'
 			pcap.error_info = None
 
-			tcptraceout = App.CallTCPTrace(pcapfile, outdir, tcptrace)																									
+			(tcptraceout, tcptraceerr) = App.CallTCPTrace(pcapfile, outdir, tcptrace)
+			if (tcptraceout==None):
+				pcap.error_info = tcptraceerr
+				raise Exception(tcptraceerr)
 
 			App.extractFlows(tcptraceout, os.path.join(outdir,"ts_flow.dat"), pcap.id)
 			App.loadflowCache(pcap.id)
@@ -175,7 +176,7 @@ class App(object):
 			pcap.status = 'success'
 			pcap.error_info = None
 
-			log.info("processing %s done (took %.3fs)" % (pcapfile, (time.time() - startTime)))
+			log.info("processing %s done, %s (took %.3fs)" % (pcapfile, pcap.status, (time.time() - startTime)))
 
 		except:
 			# remove temporary output folder + contents
@@ -197,8 +198,14 @@ class App(object):
 				}, id = pcap.id)
 
 			else:
-				log.warn("pcapfile %s not found (took %.3fs)" % (pcapfile, (time.time() - startTime))
+				log.warn("pcapfile %s not found (took %.3fs)" % (pcapfile, (time.time() - startTime)))
 
+			return 1
+
+		# remove temporary output folder + contents
+		if (os.path.exists(outdir)): 
+			shutil.rmtree(outdir) 
+		return 0
 
 if __name__ == "__main__":
 	"""
@@ -208,14 +215,11 @@ if __name__ == "__main__":
 
 	You should also configure two environment variables:
 
-		PROCESS_DB		postgres DB (format: postgres://user:password@host/database)
+		PROCESS_DB		postgres DB (format: postgresql://user:password@host/database)
 		TCPTRACE_BIN	path to tcptrace executable (default: <cwd>/tcptrace)
 
 	"""
-	if (len(sys.argv)<=1 or not os.path.isfile(argv[1])):
-		log.error('Usage: python %s <pcapfile>' % argv[0])
+	if (len(sys.argv)<=1 or not os.path.isfile(sys.argv[1])):
+		log.error('Usage: python %s <pcapfile>' % sys.argv[0])
 		sys.exit(1)
-
-	tcptrace = os.environ.get('TCPTRACE_BIN', '%s/tcptrace' % os.getcwd())
-
-	App.process(argv[1], tcptrace)
+	sys.exit(App.process(sys.argv[1]))

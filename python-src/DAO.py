@@ -18,21 +18,24 @@ from log import *
 
 class DAO(object):
 	_instance = None
-	db = None
-	engine = None
+
+	db = os.environ.get('PROCESS_DB')
+	engine = sqlalchemy.create_engine(db)
 	Base = declarative_base()
 	
 	def __new__(self, *args, **kwargs):
 		if not self._instance:
-			self.db = os.environ.get('PROCESS_DB').replace('postgres://', 'postgresql+psycopg2://')
-			self.engine = sqlalchemy.create_engine(db)
 			self._instance = super(DAO, self).__new__(self, *args, **kwargs)
-			log("Connected to " + self.db);
+			log("Connected to " + DAO.db);
 		return self._instance
 
 	def __init__(self):
-		self.DBSession	= sessionmaker(bind=DAO.engine)
+		self.DBSession = sessionmaker(bind=DAO.engine)
 	
+	@staticmethod
+	def updateMetaData():
+		DAO.Base.metadata.create_all(DAO.engine)
+
 	def create(self, entity):
 		try:
 			session = self.DBSession()

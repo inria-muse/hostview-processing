@@ -1,0 +1,50 @@
+#!/usr/bin/make -f
+
+config-stamp:
+	dh_testdir
+	./configure --prefix=/usr --sysconfdir=/etc --mandir=/usr/share/man
+	touch config-stamp
+
+configure: config-stamp
+
+build-stamp: configure
+	dh_testdir
+	$(MAKE)
+	touch build-stamp
+
+build: build-stamp
+
+clean:
+	dh_testdir
+	rm -f build-stamp config-stamp
+	-$(MAKE) spotless
+	-test -r /usr/share/misc/config.sub && \
+		cp -f /usr/share/misc/config.sub config.sub
+	-test -r /usr/share/misc/config.guess && \
+		cp -f /usr/share/misc/config.guess config.guess
+	dh_clean
+
+binary-indep: build
+	dh_testdir
+	dh_testroot
+
+binary-arch: build
+	dh_testdir
+	dh_testroot
+	dh_installdirs
+	dh_install
+	dh_installman
+	dh_installdocs
+	dh_installchangelogs CHANGES
+	dh_strip
+	dh_compress
+	dh_fixperms
+	dh_installdeb
+	dh_shlibdeps
+	dh_gencontrol
+	dh_md5sums
+	dh_builddeb
+
+binary: binary-indep binary-arch
+
+.PHONY: binary binary-arch binary-indep clean

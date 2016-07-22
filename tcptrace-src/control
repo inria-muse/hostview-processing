@@ -1,0 +1,18 @@
+Source: tcptrace
+Section: net
+Priority: optional
+Maintainer: Noah Meyerhans <noahm@debian.org>
+Standards-Version: 3.8.3.0
+Build-Depends: libpcap-dev, debhelper (>= 5), autotools-dev
+Homepage: http://www.tcptrace.org/
+
+Package: tcptrace
+Architecture: any
+Depends: ${shlibs:Depends}
+Recommends: tcpdump, xplot-xplot.org
+Description: Tool for analyzing tcpdump output
+ Tcptrace is a tool for analyzing and reporting on tcpdump (or other
+ libpcap) dump files.  It can summarize the data or generate graph
+ data for use with the gnuplot tool from the gnuplot package.  
+ Graph data can be created for throughput, RTT, time sequences, 
+ segment size, and cwin.

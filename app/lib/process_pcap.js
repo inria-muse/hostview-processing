@@ -10,40 +10,41 @@
     , utils = require('./utils');
 
 
-var getinfo = function(p) {
-    var base = path.basename(p)
-
-    var info = base.replace('.pcap.zip','').split('_');
-    if (info.length != 5) return undefined;
-
-    return {
-        basename : base,
-        session_ts : parseInt(info[0]),
-        conn_ts : parseInt(info[1]),
-        filenum : parseInt(info[2]),
-        adapter : info[3],
-        part : info[4],
-        islast : (info[4]==='last')
-    }
-};
-
-/** Process single (merged) pcap file. */
-var pcapprocess = module.exports.pcapprocess = function(mergedfile, db, cb) {
-    if (!mergedfile || !db)
-        return cb(new Error('[process_pcap] missing arguments'));
-
-    // call the python script
-};
-
-/** Process raw partial pcaps from Hostview. */
+/**
+ * Process raw partial pcaps from Hostview. While all parts are not
+ * available, the parts are stored to a process folder. Once all parts
+ * have been received, the actual pcap processing (tcptrace) is done.
+ *
+ * The tcptrace processing is done using the python scripts in 'python-src'.
+ */
 module.exports.process = function(file, db, config, cb) {
     if (!file || !db || !config)
         return cb(new Error('[process_pcap] missing arguments'));
 
-    // file.path == /**/sessionstarttime_connectionstarttime_filenum_adapterid_[part|last].pcap.zip
+    // parse file name into file info
+    var getinfo = function(p) {
+        // format: sessionstarttime_connectionstarttime_filenum_adapterid_[part|last].pcap.zip
+        var base = path.basename(p)
+
+        var info = base.replace('.pcap.zip','').split('_');
+        if (info.length != 5) return undefined;
+
+        return {
+            basename : base,
+            session_ts : parseInt(info[0]),
+            conn_ts : parseInt(info[1]),
+            filenum : parseInt(info[2]),
+            adapter : info[3],
+            part : info[4],
+            islast : (info[4]==='last')
+        }
+    };
+
     var finfo = getinfo(file.path);
     debug('prosess pcap', finfo);
-    if (!finfo) return cb(new Error("[process_pcap] invalid filename: " + file.path));
+
+    if (!finfo) 
+        return cb(new Error("[process_pcap] invalid filename: " + file.path));
 
     // copy the file to the pcap folder for processing
     try {
@@ -63,7 +64,6 @@ module.exports.process = function(file, db, config, cb) {
 
         var lastfilenum = -1;
         var fileinfos = [];
-        var intransaction = false;
 
         files.forEach(function(item) {
             var finfo = getinfo(item);
@@ -107,13 +107,6 @@ module.exports.process = function(file, db, config, cb) {
                     debug('move ' + files[0] + ' to ' + mergedfile);
                     fs.move(files[0], mergedfile, callback);
                 }
-            },
-
-            function(callback) {
-                db._db.raw('BEGIN;', []).run(function(err, res) {
-                    intransaction = !err;
-                    callback(err);
-                });
             },
 
             function(callback) {
@@ -179,12 +172,24 @@ module.exports.process = function(file, db, config, cb) {
                 loop();
             },
 
-            /*
             function(callback) {
-                // process the combined trace and insert data to the db
-                pcapprocess(mergedfile, db, callback);
+                // call the tcptrace python script to process the pcap file
+                child_process.exec(
+                    'python ' + config.tcptrace_script + ' ' + mergedfile,
+                    { 
+                        cwd: path.dirname(config.tcptrace_script),
+                        env: { 
+                            PROCESS_DB: config.pydb,
+                            TCPTRACE_BIN: config.tcptrace
+                        }
+                    },
+                    function(err, stdout, stderr) {
+                        debug(err, stdout, stderr);
+                        if (err) return callback(err);
+                        return callback(null);
+                    }
+                );
             },
-            */
 
             function(callback) {
                 // move the combined trace to processed_dir
@@ -210,7 +215,7 @@ module.exports.process = function(file, db, config, cb) {
             }
         ], 
         function(err) {
-            debug('done, transaction active ' + intransaction, err);
+            debug('done', err);
 
             var tmp = function() {
                 // make sure we dont' leave stuff at tmp
@@ -231,16 +236,12 @@ module.exports.process = function(file, db, config, cb) {
                 });
             };
 
-            if (intransaction) {
-                if (err)
-                    db._db.raw('ROLLBACK;', []).run(tmp);
-                else
-                    db._db.raw('COMMIT;', []).run(tmp);                    
+            if (err) {
+                db.delete('pcap', {basename: path.basename(mergedfile)}, tmp);
             } else {
                 tmp();
             }
 
-
         }); // waterfall
     }); // glob
-}
+} // process

@@ -1,0 +1,79 @@
+tcptrace (6.6.7-3) unstable; urgency=low
+
+  * Break out the configure process from the build rule in debian/rules
+  * Stop using the private libpcap function pcap_offline_read and use the
+    proper pcap_dispatch function instead. (Closes: #545595)
+  * Provide a manpage for xpl2gpl.
+  * Bump standards version to 3.8.3.0 (no changes needed)
+
+ -- Noah Meyerhans <noahm@debian.org>  Tue, 08 Sep 2009 09:14:32 -0400
+
+tcptrace (6.6.7-2) unstable; urgency=low
+
+  * Switch to recommending xplot-xplot.org, now that it's packaged.
+
+ -- Noah Meyerhans <noahm@debian.org>  Sun, 08 Mar 2009 23:08:59 -0400
+
+tcptrace (6.6.7-1) unstable; urgency=low
+
+  * New upstream version (Closes: #399898)
+  * Move xpl2gpl to /usr/bin/ (Closes: #422169)
+  * set policy version to 3.8.0.0
+  * Include the FAQ and THANKS files in /usr/share/doc
+  * Update README.debian to no longer suggest that somebody is working
+    on packaging xplot for Debian, since after this many years it's
+    clear that they're not.
+  * Update debian/copyright to be a bit more descriptive.
+
+ -- Noah Meyerhans <noahm@debian.org>  Thu, 16 Oct 2008 00:27:36 -0400
+
+tcptrace (6.6.1-1.4) unstable; urgency=low
+
+  * Non-maintainer upload to eliminate debmake.
+  * Eliminate debmake (Closes: #418265).
+  * Auto-update config.guess and config.sub (Closes: #299323).
+
+ -- Thijs Kinkhorst <thijs@debian.org>  Sun, 27 Jan 2008 07:51:18 +0100
+
+tcptrace (6.6.1-1.3) unstable; urgency=low
+
+  * Porter NMU.
+  * Update config.guess/config.sub (Closes: #333826).
+
+ -- Aurelien Jarno <aurel32@debian.org>  Sun, 11 Mar 2007 22:50:14 +0100
+
+tcptrace (6.6.1-1.2) unstable; urgency=medium
+
+  * Non-maintainer upload.
+  * As suggested by Santiago Vila, maintainer of debmake, changed tcptrace to
+    use debmake's debstd, instead its own copy (Closes: #405268).
+
+ -- Nelson A. de Oliveira <naoliv@debian.org>  Sat, 13 Jan 2007 20:32:47 -0200
+
+tcptrace (6.6.1-1.1) unstable; urgency=medium
+
+  * Non-maintainer upload.
+  * tcptrace needs to build-depends on debmake to get packages built properly.
+    Now, dependencies are correctly declared on generated packages.
+    (Closes: #405268)
+
+ -- Nelson A. de Oliveira <naoliv@debian.org>  Mon,  8 Jan 2007 19:58:20 -0200
+
+tcptrace (6.6.1-1) unstable; urgency=low
+
+  * New upstream release.
+  * Bumped standards version to 3.6.1
+  * Use upstream file from flex_bison instead of generating our own
+
+ -- Noah Meyerhans <noahm@debian.org>  Wed,  7 Apr 2004 00:37:34 -0400
+
+tcptrace (6.2.0-1) unstable; urgency=low
+
+  * Initial release.
+  * Note that because xplot (the one from xplot.org) is not packaged
+    yet, you won't get the really cool graphing features.  I'll upload
+    it soon.
+
+ -- Noah Meyerhans <noahm@debian.org>  Thu, 19 Sep 2002 14:56:10 -0400
+
+
