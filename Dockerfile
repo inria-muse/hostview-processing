@@ -1,12 +1,12 @@
-# current stable LTS on top of debian image
+# current stable LTS node on top of debian image
 FROM node:4.4.7-wheezy
 
 # install data processing tools
-RUN apt-get update && apt-get -y install libpcap dtrx libtrace-tools python python-dev python-pip && pip install psycopg2 sqlalchemy
+RUN apt-get update && apt-get -y install libpcap-dev gzip dtrx libtrace-tools python python-dev python-pip && pip install psycopg2 sqlalchemy
 
 # install tcptrace from source
 COPY tcptrace-src /tmp/tcptrace
-RUN cd /tmp/tcptrace && ./configure && make && make install
+RUN cd /tmp/tcptrace && ./configure && make && cp tcptrace /usr/bin/
 
 # create non-root user account
 RUN groupadd -r nodeuser && useradd -r -g nodeuser nodeuser

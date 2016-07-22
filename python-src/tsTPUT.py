@@ -48,8 +48,9 @@ class tsTPUT(DAO.Base):
         startTime = time.time()
         objList = []
 
+        log.info("process tput %s"%filename)
         f = open(filename)
-            
+
         for line in f:
             line = line.strip().lower()
             #     1       2       3     4             5    6          7

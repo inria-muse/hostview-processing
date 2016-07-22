@@ -39,6 +39,7 @@ services:
     networks:
       - back-tier
     volumes:
+     - ./data:/data
      - ./docker-entrypoint-initdb.d:/docker-entrypoint-initdb.d
 
 networks:

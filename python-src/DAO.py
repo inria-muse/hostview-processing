@@ -4,7 +4,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.exc import SQLAlchemyError
 
-import sys, sqlalchemy, datetime, os
+import sys, sqlalchemy, datetime, os, stat
 from log import *
 
 """
@@ -101,8 +101,7 @@ class DAO(object):
 			#Creating the file
 			f = open(tmpFile, 'w')
 			for obj in listOfEntities:
-				f.write("%s" % getattr(obj, columns[0]))
-				
+				f.write("%s" % getattr(obj, columns[0]))				
 				for c in columns[1:]:
 					if getattr(obj, c) != None:
 						f.write(",%s" % getattr(obj, c))
@@ -110,12 +109,15 @@ class DAO(object):
 						f.write(",")
 				f.write("\n")
 			f.close()
+			os.chmod(tmpFile, stat.S_IRUSR | stat.S_IRGRP | stat.S_IROTH | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+
+			log.info("wrote %d rows to %s" % (len(listOfEntities), tmpFile))
 			
 			r = session.execute(query)
 			session.commit()
 			return r
 		except SQLAlchemyError as err:
-			log.error( "DB COPY FAILED: \n%s" % err )
+			log.error("DB COPY FAILED: \n%s" % err )
 			log.info("QUERY:\t%s" % query)
 			sys.exit(1)
 		finally:

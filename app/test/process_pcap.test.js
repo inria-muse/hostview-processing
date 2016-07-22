@@ -14,11 +14,10 @@ describe('process_pcap', function() {
     var file = null;
 
     var cfg = {
-        pcap_dir : '/tmp/pcapparts',
-        processed_dir : '/tmp/processed',
+        pcap_dir : '/data/pcapparts',
+        processed_dir : '/data/processed',
         db: process.env.PROCESS_DB,
         pydb: process.env.PROCESS_DB.replace('postgres://','postgresql+psycopg2://'),
-        tcptrace: '/python/tcptrace',
         tcptrace_script : '/python/main.py'
     };
 

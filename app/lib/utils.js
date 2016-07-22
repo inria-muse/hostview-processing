@@ -29,22 +29,6 @@ module.exports.uncompress = function(src, dst, cb) {
     }        
 }
 
-module.exports.uncompress2 = function(src, dst, cb) {
-    try {
-        fs.ensureDirSync(dst);
-
-        child_process.exec(
-            "dtrx -q -n -f " + src,
-            { cwd: dst },
-            function(err, stdout, stderr) {
-                if (err) return cb(err);
-                return cb(undefined);
-            });
-    } catch (err) {
-        cb(err);
-    }
-}
-
 /** Return max of the two dates. */
 module.exports.datemax = function(a,b) {
     if (!b) return a;

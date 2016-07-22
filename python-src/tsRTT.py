@@ -52,6 +52,8 @@ class tsRTT(DAO.Base):
     def readFromTCPTrace(filename, pcap_id, findflow_id):
         startTime = time.time()
         objList = []
+
+        log.info("process rtt %s"%filename)
         f = open(filename)
         
         for line in f:

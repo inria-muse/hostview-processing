@@ -77,14 +77,16 @@ class tsEVENT(DAO.Base):
 	def readFromTCPTrace(filename, pcap_id, findflow_id):
 		startTime = time.time()
 		objList = []
+
+		log.info("process event %s"%filename)
 		f = open(filename)
-		
+
 		for line in f:
 			line = line.strip().lower()
 			#1       2              3  4       5     6                 7          8
 			#adb2aac 195.50.164.210:80 0.0.0.0:55896 1290560444.537487 3948668423 OOO
 			m = re.search("^([a-z0-9]+)\s+(\d{1,3}\.\d{1,3}\.\d{1,3}.\d{1,3}):(\d+) (\d{1,3}\.\d{1,3}\.\d{1,3}.\d{1,3}):(\d+) (\d+.\d+)\s+(\d+)\s+([a-z_ ]+)", line)
-			
+
 			if not m: continue
 			obj			= tsEVENT(pcap_id)
 			flow_code 	= m.group(1)
@@ -98,7 +100,7 @@ class tsEVENT(DAO.Base):
 			obj.time	= time.ctime(float(m.group(6)))
 			obj.seq		= m.group(7)
 			obj.setType(m.group(8).strip())
-			
+
 			if obj.type == "": continue		#No use storing instances without type :-)
 
 			(obj.flow_id, obj.direction) = findflow_id(pcap_id, flow_code)

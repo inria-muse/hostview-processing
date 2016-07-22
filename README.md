@@ -44,7 +44,7 @@ Note, the first boot is long + verbose as the Postgresql container initialzes th
 
 To get a shell access to the app container (will not start the app) with data mounted on the host, do:
 
-    docker run --rm -it -e NODE_ENV=development hostview/processing /bin/bash
+    docker run --rm -it hostview/processing /bin/bash
 
 To find out more about running containers, networks etc:
 

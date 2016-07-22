@@ -46,6 +46,7 @@ class App(object):
 		for r in rs:
 			key = (r.pcap_id, r.flow_code)
 			App.flowCache[key]  = r
+		log.info("loadflowCache %d entries"%len(App.flowCache.keys()))
 
 	@staticmethod
 	def findFlowId(pcap_id, flow_code):
@@ -110,19 +111,18 @@ class App(object):
 	def CallTCPTrace(pcapfile, outdir):
 		startTime = time.time()
 		args = [
-			"tcptrace",
+			"/usr/bin/tcptrace",
 			"-nlj", 
-			"--output_dir="+outdir, 
-			"--output_prefix=ts", 
+			'--output_dir='+outdir,
+			'--output_prefix=ts',
 			pcapfile
 		]
 		log.info(' '.join(args))
 
-		process = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+		process = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=open(os.devnull, 'w'))
 		(out,err) = process.communicate()
 
-		log.info("TCPTRACE %s[%d] (took %.3fs)" % (('ok' if (err==None) else 'failed'), process.returncode, (time.time() - startTime)))
-		log.info(out)
+		log.info("TCPTRACE %s[%d] (took %.3fs)" % (('ok' if (process.returncode==0) else 'failed'), process.returncode, (time.time() - startTime)))
 		if (process.returncode!=0):
 			log.error(err)
 			return (None, err)
@@ -135,19 +135,21 @@ class App(object):
 		"""
 		App.flowCache = {}
 		pcapfile = os.path.abspath(pcapfile)
-		outdir = "%s/process_pcap" % os.path.dirname(pcapfile)
+		outdir = "%s/%s" % (os.path.dirname(pcapfile),os.path.basename(pcapfile).split('_')[0]) 
+		if not os.path.exists(outdir): 
+			os.mkdir(outdir)
+
 		pcap = None
 
 		startTime = time.time()
 
 		try:
-			if not os.path.exists(outdir): 
-				os.mkdir(outdir)
 
 			fsize = os.path.getsize(pcapfile) / (1024.0*1024.0)
 			log.info("process pcap %s%s%s, size %s%.4fMB" %(BLUE, os.path.basename(pcapfile),NULL, RED, fsize))
 
-			pcap = DAO().select_by(Pcap, basename = os.path.basename(pcapfile));
+			pcap = DAO().select_by(Pcap, basename = os.path.basename(pcapfile))
+			log.info(pcap)
 
 			DAO().update_by(Pcap, { 
 				'status': 'processing', 
@@ -157,12 +159,12 @@ class App(object):
 			pcap.status = 'processing'
 			pcap.error_info = None
 
-			(tcptraceout, tcptraceerr) = App.CallTCPTrace(pcapfile, outdir, tcptrace)
+			(tcptraceout, tcptraceerr) = App.CallTCPTrace(pcapfile, outdir)
 			if (tcptraceout==None):
 				pcap.error_info = tcptraceerr
 				raise Exception(tcptraceerr)
 
-			App.extractFlows(tcptraceout, os.path.join(outdir,"ts_flow.dat"), pcap.id)
+			App.extractFlows(tcptraceout, os.path.join(outdir,"flow.dat"), pcap.id)
 			App.loadflowCache(pcap.id)
 			App.extractThroughput(os.path.join(outdir,"ts_tput.dat"), pcap.id)
 			App.extractEvent(os.path.join(outdir,"ts_tsg.dat"), pcap.id)
@@ -213,10 +215,9 @@ if __name__ == "__main__":
 
 		python main.py <pcapfile>
 
-	You should also configure two environment variables:
+	You should also configure the following environment variable:
 
 		PROCESS_DB		postgres DB (format: postgresql://user:password@host/database)
-		TCPTRACE_BIN	path to tcptrace executable (default: <cwd>/tcptrace)
 
 	"""
 	if (len(sys.argv)<=1 or not os.path.isfile(sys.argv[1])):
