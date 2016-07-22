@@ -166,9 +166,13 @@ class App(object):
 
 			App.extractFlows(tcptraceout, os.path.join(outdir,"flow.dat"), pcap.id)
 			App.loadflowCache(pcap.id)
-			App.extractThroughput(os.path.join(outdir,"ts_tput.dat"), pcap.id)
-			App.extractEvent(os.path.join(outdir,"ts_tsg.dat"), pcap.id)
-			App.extractRTT(os.path.join(outdir,"ts_rtt.dat"), pcap.id)
+
+			if (os.environ.get('INSERT_TPUT', 'true')=='true'):
+				App.extractThroughput(os.path.join(outdir,"ts_tput.dat"), pcap.id)
+			if (os.environ.get('INSERT_EVENTS', 'false')=='true'):
+				App.extractEvent(os.path.join(outdir,"ts_tsg.dat"), pcap.id)
+			if (os.environ.get('INSERT_RTT', 'true')=='true'):
+				App.extractRTT(os.path.join(outdir,"ts_rtt.dat"), pcap.id)
 
 			DAO().update_by(Pcap, { 
 				'status': 'success', 
@@ -217,8 +221,10 @@ if __name__ == "__main__":
 
 	You should also configure the following environment variable:
 
-		PROCESS_DB		postgres DB (format: postgresql://user:password@host/database)
-
+		PROCESS_DB		postgresql://user:password@hostname/database
+		INSERT_TPUT     true(default)|false - insert TCP throughput timeseries
+		INSERT_RTT 	    true(default)|false - insert TCP RTT timeseries
+		INSERT_EVENTS   true|false(default) - insert TCP EVENTS
 	"""
 	if (len(sys.argv)<=1 or not os.path.isfile(sys.argv[1])):
 		log.error('Usage: python %s <pcapfile>' % sys.argv[0])
