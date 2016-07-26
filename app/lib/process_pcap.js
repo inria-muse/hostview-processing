@@ -9,7 +9,6 @@
     , child_process = require('child_process')
     , utils = require('./utils');
 
-
 /**
  * Process raw partial pcaps from Hostview. While all parts are not
  * available, the parts are stored to a process folder. Once all parts

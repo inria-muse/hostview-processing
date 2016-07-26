@@ -5,11 +5,11 @@ services:
     build: .
     image: hostview/processing
     volumes:
-     - /home/ucnstudy/hostview_data:/data
+     - /home/ucndata/hostview2016:/data
     links:
      - redis
     networks:
-      - back-tier
+      - backtier
     environment:
      NODE_ENV: production
      PROCESS_REDIS: redis://redis:6379
@@ -24,8 +24,8 @@ services:
   redis:
     image: redis:3.0
     networks:
-      - back-tier
+      - backtier
 
 networks:
-  back-tier:
+  backtier:
     driver: bridge

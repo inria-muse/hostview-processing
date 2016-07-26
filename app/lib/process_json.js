@@ -6,5 +6,6 @@ module.exports.process = function(file, db, cb) {
     if (!file || !db)
         return cb(new Error('missing arguments'));
 
-    return cb(new Error('TODO'));
+    // jsons will end up to the failed folder after x retries with this error
+    return cb(new Error('Not implemented'));
 }

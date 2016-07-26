@@ -70,6 +70,6 @@ Then run the unit tests:
 
 ### Production
 
-To run the app in production mode, use Docker Compose (will start Redis + App containers, with on host Postgresql):
+To run the app in production mode, use Docker Compose (will start Redis + App containers, with on-host Postgresql):
 
     PROCESS_DB=postgres://<user>:<password>@ucn.inria.fr/hostview2016 docker-compose -f prod.yml -d up

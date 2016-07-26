@@ -12,7 +12,7 @@ services:
      - redis
      - postgres
     networks:
-      - back-tier
+      - backtier
     environment:
      NODE_ENV: development
      DEBUG: hostview
@@ -28,7 +28,7 @@ services:
   redis:
     image: redis:3.0
     networks:
-      - back-tier
+      - backtier
 
   postgres:
     image: postgres:9.5
@@ -37,11 +37,11 @@ services:
      POSTGRES_PASSWORD: h0stvi3w
      POSTGRES_DB: hostview  
     networks:
-      - back-tier
+      - backtier
     volumes:
      - ./data:/data
      - ./docker-entrypoint-initdb.d:/docker-entrypoint-initdb.d
 
 networks:
-  back-tier:
+  backtier:
     driver: bridge
