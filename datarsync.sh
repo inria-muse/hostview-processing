@@ -12,7 +12,7 @@ RUSER=apietila
 RHOST=muse2.paris.inria.fr
 
 # rsync opts
-OPTS='-av -e /usr/bin/ssh'
+OPTS='-av -e /usr/bin/ssh --remove-source-files'
 
 # root data directory on muse2.paris.inria.fr
 DATASRC=/home/nodeapp/hostviewdata/
@@ -20,5 +20,4 @@ DATASRC=/home/nodeapp/hostviewdata/
 # root data directory on ucn.paris.inria.fr
 DATADST=/home/ucndata/hostview2016/incoming/
 
-#$RSYNC $OPTS -f"+ */" -f"+ *.zip" -f"- *"  --remove-source-files $RUSER@$RHOST:$DATASRC $DATADST/
 /usr/bin/rsync $OPTS $RUSER@$RHOST:$DATASRC $DATADST
