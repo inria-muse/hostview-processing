@@ -70,6 +70,14 @@ Then run the unit tests:
 
 ### Production
 
+To (re-)create the database tables, do:
+
+    $ psql -h localhost -U hostview -d hostview2016 -f docker-entrypoint-initdb.d/init-hostview.sql
+
+To connect to the local database, do:
+
+    $ psql -W -h localhost -U hostview -d hostview2016
+
 To run the app in production mode, use Docker Compose (will start Redis + App containers, with on-host Postgresql):
 
     PROCESS_DB=postgres://<user>:<password>@ucn.inria.fr/hostview2016 docker-compose -f prod.yml -d up

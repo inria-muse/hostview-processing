@@ -61,7 +61,7 @@ var kue = require('kue')
     workers: getint('PROCESS_WORKERS',1),             // num worker threads
     concurrency: getint('PROCESS_CONCURRENCY',5),     // num jobs / worker
     redis: process.env.PROCESS_REDIS||undefined,      // redis url (or use default)
-    db: process.env.PROCESS_DB||undefined             // postgresql url (or use default)
+    db: process.env.PROCESS_DB||undefined,            // postgresql url (or use default)
     tcptrace_script: '/python/main.py'                // entrypoint to tcptrace scripts
   };
 
