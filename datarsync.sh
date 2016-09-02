@@ -7,7 +7,7 @@
 # 0 * * * * /home/ucndata/hostview-processing/datarsync.sh > /home/ucndata/hostviewupload.log 2>&1
 #
 
-# config
+# config: RUSER must be in 'nodeapp' group on muse2 for this to work !!
 RUSER=apietila
 RHOST=muse2.paris.inria.fr
 
@@ -21,3 +21,5 @@ DATASRC=/home/nodeapp/hostviewdata/
 DATADST=/home/ucndata/hostview2016/incoming/
 
 /usr/bin/rsync $OPTS $RUSER@$RHOST:$DATASRC $DATADST
+
+echo 'Sync ready!'

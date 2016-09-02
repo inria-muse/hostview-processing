@@ -6,7 +6,7 @@ Hostview Processing contains the data processing scripts that store the raw file
 * when a new file is received, a processing task is queued on the task queue
 * a free worker process picks up the processing task from the queue and records the data to the db
 * the worker notifies the master process of the success/failure of the task processing
-* on failure, the master will requeue (up to number of times) the task
+* on failure, the master will requeue (up to some number of times) the task
 * on success, the file is moved to the permanent storage location
 * on repeated failures, the file is moved to a separate failed files folder for manual inspection
 
