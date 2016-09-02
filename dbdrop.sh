@@ -2,7 +2,7 @@
 
 # small helper script to drop all tables from a given db
 DB=$1
-if [ -n "${DB+1}" ]; then
+if [ -n "${DB}" ]; then
 while true; do
     read -p "Do you really want to drop all tables from ${DB} [yn] ? " yn
     case $yn in
