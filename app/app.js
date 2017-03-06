@@ -222,7 +222,7 @@ var kue = require('kue')
       // [..., device_id, hostview_ver, year, month]
       var p = path.dirname(job.data.filename).split(path.sep);
       if (p.length < 5) {
-        debug(processing, 'Invalid filepath: ' + job.data.filename);
+        debug('Invalid filepath: ' + job.data.filename);
         return done(new Error('Invalid filepath: ' + job.data.filename));
       }
 
@@ -233,10 +233,10 @@ var kue = require('kue')
       // make sure the device is recorded in the db and get its id
       db.getOrInsert('devices', { device_id : device_id }, function(err, dev) {
         if (err) {
-          debug('processing', 'Error inserting the device into the DB');
+          debug('Error inserting the device ', device_id, ' into the DB: ', err);
           return done(err);
         } else {
-            debug('processing', 'Got/Inserted device');
+            debug('Got/Inserted device');
         }
 
         // add or update files table
@@ -247,21 +247,22 @@ var kue = require('kue')
           device_id: dev.id,
           hostview_version: hv 
         };        
-        debug('processing',file);
+        debug('Processing: ', file);
 
         // this will return error if the file exists already in the database
         // and has been processed (status == 'success')
         db.insertOrUpdateFile(file, function(err, res) {
           if (err) {
-            debug('processing', 'Error inserting the device into the DB');
+            debug('Error inserting the device into the DB: ', err);
             return done(err);
           } else {
-              debug('processing', 'Inserted/Updated file');
+              debug('Inserted/Updated file');
           }
 
           var processdone = function(err, res) {
             // updates file status to error/success and signals the queue that we're done
             if (err) {
+              debug('Process done but with an error: ', err);
               file.status = 'errored';
               file.error_info = err+"";
             } else {
