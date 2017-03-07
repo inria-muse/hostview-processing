@@ -115,7 +115,7 @@ DB.prototype.insertOrUpdateFile = function(file, cb) {
                         callback(new Error('file already processed ' + dbfile.basename));
                     } else {                        
                         var update = {
-                            updated_at : that.db.sql('now()'),
+                            updated_at : that._db.sql('now()'),
                             status : file.status
                         };
                         var idfilter = { id : dbfile.id };

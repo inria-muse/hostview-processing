@@ -164,7 +164,7 @@ var kue = require('kue')
 
     var enqueue = function(path) {
       var task = { filename : path, filetype : getFileType(path) };
-      debug(JSON.stringify(task,null,2));
+      debug('Master: ', JSON.stringify(task,null,2));
 
       var prio = 'normal';
       if (task.filetype == 'sqlite') {
@@ -222,7 +222,7 @@ var kue = require('kue')
       // [..., device_id, hostview_ver, year, month]
       var p = path.dirname(job.data.filename).split(path.sep);
       if (p.length < 5) {
-        debug('Invalid filepath: ' + job.data.filename);
+        debug('Worker: %d', process.pid ,' Invalid filepath: ' + job.data.filename);
         return done(new Error('Invalid filepath: ' + job.data.filename));
       }
 
@@ -233,10 +233,10 @@ var kue = require('kue')
       // make sure the device is recorded in the db and get its id
       db.getOrInsert('devices', { device_id : device_id }, function(err, dev) {
         if (err) {
-          debug('Error inserting the device ', device_id, ' into the DB: ', err);
+          debug('Worker: %d', process.pid ,' Error inserting the device ', device_id, ' into the DB: ', err);
           return done(err);
         } else {
-            debug('Got/Inserted device');
+            debug('Worker: %d', process.pid ,' Got/Inserted device');
         }
 
         // add or update files table
@@ -247,30 +247,32 @@ var kue = require('kue')
           device_id: dev.id,
           hostview_version: hv 
         };        
-        debug('Processing: ', file);
+        debug('Worker: %d', process.pid ,' Processing: ', file);
 
         // this will return error if the file exists already in the database
         // and has been processed (status == 'success')
         db.insertOrUpdateFile(file, function(err, res) {
           if (err) {
-            debug('Error inserting the device into the DB: ', err);
+            debug('Worker: %d', process.pid ,' Error inserting the device into the DB: ', err);
             return done(err);
           } else {
-              debug('Inserted/Updated file');
+              debug('Worker: %d', process.pid ,' Inserted/Updated file');
           }
 
           var processdone = function(err, res) {
             // updates file status to error/success and signals the queue that we're done
             if (err) {
-              debug('Process done but with an error: ', err);
+              debug('Worker: %d', process.pid ,' Process done but with an error: ', err);
               file.status = 'errored';
               file.error_info = err+"";
             } else {
+              debug('Worker: %d', process.pid ,' Completed processing: ', res)
               file.status = 'success';
             }
 
             db.insertOrUpdateFile(file, function() {
               // signal done with error (if any)
+              debug('Worker: %d', process.pid ,' Finished with file: ', file)
               done(err);
             });
 
