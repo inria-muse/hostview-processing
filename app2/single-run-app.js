@@ -14,7 +14,7 @@ var debug = require('debug')('hostview-single-time')
     , fs = require('fs-extra')
     , path = require('path')
     , chokidar = require('chokidar')
-    , sqldb = require('./lib/sqldb')
+    , sqldb = require('../app/lib/sqldb')
     , process_sqlite = require('../app/lib/process_sqlite');
 
 
