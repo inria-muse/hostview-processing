@@ -102,7 +102,7 @@ DB.prototype.getOrInsertDevice = function(table, row, extra, cb) {
             client.select('*').from(table).where(row).run,
             function(res, callback) {
                 if (res.rows.length==0) {
-                    var row2 = { device_id : row.device_id, user_id : extra};
+                    var row2 = { device_id : row.device_id, secret_token : extra};
                     client.insert(table, row2).returning('*').row(callback);
                 } else {
                     row.id = res.rows[0].id;
