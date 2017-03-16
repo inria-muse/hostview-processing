@@ -266,13 +266,13 @@ var kue = require('kue')
               file.status = 'errored';
               file.error_info = err+"";
             } else {
-              debug('Worker: %d', process.pid ,' Completed processing: ', res)
+              debug('Worker: %d', process.pid ,' Completed processing: ', res);
               file.status = 'success';
             }
 
             db.insertOrUpdateFile(file, function() {
               // signal done with error (if any)
-              debug('Worker: %d', process.pid ,' Finished with file: ', file)
+              debug('Worker: %d', process.pid ,' Finished with file: ', file);
               done(err);
             });
 
