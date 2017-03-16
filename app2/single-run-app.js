@@ -42,14 +42,14 @@ var processNewFile = function (job) {
     // in a worker
     var db = new sqldb.DB(config.db);
 
-    debug('Processing file %s', job.data.filename);
+    debug('Processing file %s', job.filename);
 
     //TODO make sure that this path is correct and is split properly
     // [..., device_id, hostview_ver, year, month]
-    var p = path.dirname(job.data.filename).split(path.sep);
+    var p = path.dirname(job.filename).split(path.sep);
     if (p.length < 5) {
-        debug('Worker: %d', process.pid ,' Invalid filepath: ' + job.data.filename);
-        return done(new Error('Invalid filepath: ' + job.data.filename));
+        debug('Worker: %d', process.pid ,' Invalid filepath: ' + job.filename);
+        return done(new Error('Invalid filepath: ' + job.filename));
     }
 
 
