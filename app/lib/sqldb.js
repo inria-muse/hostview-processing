@@ -93,6 +93,30 @@ DB.prototype.getOrInsert = function(table, row, cb) {
     });
 };
 
+DB.prototype.getOrInsertDevice = function(table, row, extra, cb) {
+    if (!this._db)
+        return cb(new Error('No db connection [' + this.dburl + ']'));
+
+    this._db.transaction(function(client, callback) {
+        async.waterfall([
+            client.select('*').from(table).where(row).run,
+            function(res, callback) {
+                if (res.rows.length==0) {
+                    row2 = { device_id : row.device_id, user_id : extra};
+                    client.insert(table, row).returning('*').row(callback);
+                } else {
+                    row.id = res.rows[0].id;
+                    callback(undefined, row);
+                }
+            }
+        ], callback);
+    }, function(err, res) {
+        // called upon transaction success/failure
+        if (err) return cb(err);
+        cb(undefined, res);
+    });
+};
+
 DB.prototype.insertOrUpdateFile = function(file, cb) {
     if (!this._db) 
         return cb(new Error('No db connection [' + this.dburl + ']'));
