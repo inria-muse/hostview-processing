@@ -253,7 +253,7 @@ var kue = require('kue')
         // and has been processed (status == 'success')
         db.insertOrUpdateFile(file, function(err, res) {
           if (err) {
-            debug('Worker: %d', process.pid ,' Error inserting the device into the DB: ', err);
+            debug('Worker: %d', process.pid ,' Error inserting the file into the DB: ', err);
             return done(err);
           } else {
               debug('Worker: %d', process.pid ,' Inserted/Updated file');

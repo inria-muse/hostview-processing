@@ -21,7 +21,7 @@ var debug = require('debug')('hostview-single-time')
 // Global configuration
 var config = {
     data_dir: '',
-    enable_watch: false,     // monitor incoming files ?
+    enable_watch: true,     // monitor incoming files ?
     retry: 3,                 // number of retries
     retry_delay: 3600,  // delay between retries (s)
     workers: 1,             // num worker threads
@@ -58,17 +58,9 @@ var processNewFile = function (job) {
     var user_id = p[p.length-1];
     var hv = '0.1';
 
-    //INFO Remove for testing
-    /*
-     debug('This is the path split ', p);
-     debug('device_id ', device_id);
-     debug('user_id ', user_id);
-     return;
-     */
-
     // make sure the device is recorded in the db and get its id
     //TODO insert into the device also the name of the user as by the path split
-    db.getOrInsert('devices', { device_id : device_id, user_id : user_id}, function(err, dev) {
+    db.getOrInsertDevice('devices', { device_id : device_id }, user_id, function(err, dev) {
         if (err) {
             debug('Worker: %d', process.pid ,' Error inserting the device ', device_id, ' into the DB: ', err);
             return done(err);
@@ -78,8 +70,8 @@ var processNewFile = function (job) {
 
         // add or update files table
         var file = {
-            folder: path.dirname(job.data.filename).replace(config.incoming,''),
-            basename: path.basename(job.data.filename),
+            folder: path.dirname(job.filename),
+            basename: path.basename(job.filename),
             status: 'processing',
             device_id: dev.id,
             hostview_version: hv
@@ -90,8 +82,8 @@ var processNewFile = function (job) {
         // and has been processed (status == 'success')
         db.insertOrUpdateFile(file, function(err, res) {
             if (err) {
-                debug('Worker: %d', process.pid ,' Error inserting the device into the DB: ', err);
-                return done(err);
+                debug('Worker: %d', process.pid ,' Error inserting the file into the DB: ', err);
+                return;
             } else {
                 debug('Worker: %d', process.pid ,' Inserted/Updated file');
             }
@@ -115,13 +107,13 @@ var processNewFile = function (job) {
             }; // processdone
 
             // for processing
-            file.path = job.data.filename;
+            file.path = job.filename;
 
             try {
 
                 // finally, process the file
                 //INFO processing only the sqlite files
-                if (job.data.filetype == 'sqlite') {
+                if (job.filetype == 'sqlite') {
                     console.log('process_sqlite');
                     process_sqlite.process(file, db, processdone);
 
@@ -164,20 +156,13 @@ debug(JSON.stringify(config,null,2));
 process.on('SIGTERM', () => {
     console.log('Received SIGTERM, closing the workers ...');
 
-if (monitor) monitor.close();
-monitor = undefined;
+    if (monitor) monitor.close();
+    monitor = undefined;
 });
 
 var enqueue = function(path) {
     var task = { filename : path, filetype : getFileType(path) };
     debug('Master: ', JSON.stringify(task,null,2));
-
-    var prio = 'normal';
-    if (task.filetype == 'sqlite') {
-        prio = 'critical'; // so that sessions get added asap
-    } else if (task.filetype == 'pcap') {
-        prio = 'low';
-    }
     processNewFile(task);
 };
 
@@ -195,17 +180,13 @@ monitor.on('add', function(path, stats) {
     }
 });
 
-//TODO check if it's enough to just launch it with no watch
 if (!config.enable_watch) {
     // wait for all the jobs to be processed and exit
     monitor.on('ready', function() {
         monitor.close();
         monitor = undefined;
-
-        console.log('Master waiting for the workers to finish ... ');
-        queue.shutdown(function() {
-            console.log('Master shutting down!');
-            process.exit(0);
-        });
     });
 } // else keep on watching for new files
+else {
+    debug('Watching folder ', config.data_dir);
+}
