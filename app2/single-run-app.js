@@ -49,7 +49,7 @@ var processNewFile = function (job) {
     var p = path.dirname(job.filename).split(path.sep);
     if (p.length < 5) {
         debug('Worker: %d', process.pid ,' Invalid filepath: ' + job.filename);
-        return done(new Error('Invalid filepath: ' + job.filename));
+        return;
     }
 
 
@@ -63,7 +63,7 @@ var processNewFile = function (job) {
     db.getOrInsertDevice('devices', { device_id : device_id }, user_id, function(err, dev) {
         if (err) {
             debug('Worker: %d', process.pid ,' Error inserting the device ', device_id, ' into the DB: ', err);
-            return done(err);
+            return;
         } else {
             debug('Worker: %d', process.pid ,' Got/Inserted device');
         }

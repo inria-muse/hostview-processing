@@ -755,6 +755,7 @@ module.exports.process = function(file, db, cb) {
                     debug('failed to process session ' + session.id, err); 
                     if (session.id)
                         db._db.delete('sessions').where({ id : session.id }).run(callback);
+                        callback(err);
                 } else {
                     debug('session inserted ' + session.id);             
                     callback(null, null);
