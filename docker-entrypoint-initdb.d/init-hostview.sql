@@ -90,6 +90,27 @@ CREATE TABLE activity_io (
 ALTER TABLE public.activity_io OWNER TO hostview;
 
 --
+-- Name: android_services; Type: TABLE; Schema: public; Owner: hostview; Tablespace:
+--
+
+CREATE TABLE android_services (
+    id bigint NOT NULL,
+    session_id bigint NOT NULL,
+    pid integer,
+    uid integer,
+    active_since bigint,
+    client_count integer,
+    crash_count integer,
+    last_activity_time bigint,
+    client_package character varying(260),
+    client_label character varying(260),
+    logged_at timestamp without time zone
+);
+
+ALTER TABLE public.android_services OWNER TO hostview;
+
+
+--
 -- Name: browser_activity; Type: TABLE; Schema: public; Owner: hostview; Tablespace: 
 --
 
@@ -340,6 +361,41 @@ ALTER TABLE public.files_id_seq OWNER TO hostview;
 --
 
 ALTER SEQUENCE files_id_seq OWNED BY files.id;
+
+
+--
+-- Name: gpslocation; Type: TABLE; Schema: public; Owner: hostview; Tablespace:
+--
+
+CREATE TABLE gpslocation (
+    id bigint NOT NULL,
+    session_id bigint NOT NULL,
+    latitude character varying(100),
+    longitude character varying(100)
+);
+
+
+ALTER TABLE public.gpslocation OWNER TO hostview;
+
+--
+-- Name: gpslocation_id_seq; Type: SEQUENCE; Schema: public; Owner: hostview
+--
+
+CREATE SEQUENCE gpslocation_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER TABLE public.gpslocation_id_seq OWNER TO hostview;
+
+--
+-- Name: gpslocation_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: hostview
+--
+
+ALTER SEQUENCE gpslocation_id_seq OWNED BY files.id;
 
 
 --
@@ -2424,10 +2480,28 @@ CREATE INDEX activity_io_pid_idx ON activity_io USING btree (pid);
 
 
 --
--- Name: activity_io_session_id_idx; Type: INDEX; Schema: public; Owner: hostview; Tablespace: 
+-- Name: activity_io_session_id_idx; Type: INDEX; Schema: public; Owner: hostview; Tablespace:
 --
 
 CREATE INDEX activity_io_session_id_idx ON activity_io USING btree (session_id);
+
+--
+-- Name: android_services_session_id_idx; Type: INDEX; Schema: public; Owner: hostview; Tablespace:
+--
+
+CREATE INDEX android_services_session_id_idx ON android_services USING btree (session_id);
+
+--
+-- Name: android_services_logged_at_idx; Type: INDEX; Schema: public; Owner: hostview; Tablespace:
+--
+
+CREATE INDEX android_services_logged_at_idx ON android_services USING btree (logged_at);
+
+--
+-- Name: android_services_client_package_idx; Type: INDEX; Schema: public; Owner: hostview; Tablespace:
+--
+
+CREATE INDEX android_services_client_package_idx ON android_services USING btree (client_package);
 
 
 --
@@ -2463,6 +2537,24 @@ CREATE INDEX files_device_id_idx ON files USING btree (device_id);
 --
 
 CREATE INDEX files_status_idx ON files USING btree (status);
+
+--
+-- Name: gpslocation_session_id_idx; Type: INDEX; Schema: public; Owner: hostview; Tablespace:
+--
+
+CREATE INDEX gpslocation_session_id_idx ON gpslocation USING btree (session_id);
+
+--
+-- Name: gpslocation_latitude_idx; Type: INDEX; Schema: public; Owner: hostview; Tablespace:
+--
+
+CREATE INDEX gpslocation_latitude_idx ON gpslocation USING btree (latitude);
+
+--
+-- Name: gpslocation_longitude_idx; Type: INDEX; Schema: public; Owner: hostview; Tablespace:
+--
+
+CREATE INDEX gpslocation_longitude_idx ON gpslocation USING btree (longitude);
 
 
 --
@@ -2756,6 +2848,14 @@ ALTER TABLE ONLY activity_io
 
 
 --
+-- Name: android_services_session_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: hostview
+--
+
+ALTER TABLE ONLY android_services
+    ADD CONSTRAINT android_services_session_id_fkey FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE;
+
+
+--
 -- Name: browser_activity_session_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: hostview
 --
 
@@ -2809,6 +2909,14 @@ ALTER TABLE ONLY dns_logs
 
 ALTER TABLE ONLY files
     ADD CONSTRAINT files_device_id_fkey FOREIGN KEY (device_id) REFERENCES devices(id);
+
+
+--
+-- Name: gpslocation_session_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: hostview
+--
+
+ALTER TABLE ONLY gpslocation
+    ADD CONSTRAINT gpslocations_session_id_fkey FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE;
 
 
 --
