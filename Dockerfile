@@ -2,7 +2,7 @@
 FROM node:4.4.7-wheezy
 
 # install data processing tools
-RUN apt-get update && apt-get -y install libpcap-dev gzip dtrx libtrace-tools python python-dev python-pip && pip install psycopg2 sqlalchemy
+RUN apt-get update && apt-get -y install libpcap-dev gzip dtrx libtrace-tools python python-dev python-pip && pip install --index-url=https://pypi.python.org/simple/ psycopg2 sqlalchemy
 
 # install tcptrace from source
 COPY tcptrace-src /tmp/tcptrace
