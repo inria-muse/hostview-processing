@@ -14,16 +14,16 @@ services:
     networks:
       - backtier
     environment:
-     NODE_ENV: development
-     DEBUG: hostview
-     PROCESS_REDIS: redis://redis:6379
-     PROCESS_DB: postgres://hostview:h0stvi3w@postgres/hostview
-     PROCESS_WATCH: 'yes'
-     PROCESS_DATA_DIR: '/data'
-     PROCESS_RETRY: 1
-     PROCESS_RETRY_DELAY: 1
-     PROCESS_WORKERS: 1
-     PROCESS_CONCURRENCY: 1
+      NODE_ENV: development
+      DEBUG: hostview
+      PROCESS_REDIS: redis://redis:6379
+      PROCESS_DB: postgres://hostview:h0stvi3w@postgres/hostview
+      PROCESS_WATCH: 'yes'
+      PROCESS_DATA_DIR: '/data'
+      PROCESS_RETRY: 1
+      PROCESS_RETRY_DELAY: 1
+      PROCESS_WORKERS: 1
+      PROCESS_CONCURRENCY: 1
 
   redis:
     image: redis:3.0
@@ -32,15 +32,17 @@ services:
 
   postgres:
     image: postgres:9.5
+    ports:
+      - "5432:5432"
     environment:
-     POSTGRES_USER: hostview     
-     POSTGRES_PASSWORD: h0stvi3w
-     POSTGRES_DB: hostview  
+      POSTGRES_USER: hostview     
+      POSTGRES_PASSWORD: h0stvi3w
+      POSTGRES_DB: hostview  
     networks:
       - backtier
     volumes:
-     - ./data:/data
-     - ./docker-entrypoint-initdb.d:/docker-entrypoint-initdb.d
+      - ./data:/data
+      - ./docker-entrypoint-initdb.d:/docker-entrypoint-initdb.d
 
 networks:
   backtier:
