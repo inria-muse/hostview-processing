@@ -6,7 +6,7 @@ var path = require('path')
 var fs = require('fs-extra')
 var async = require('async')
 var glob = require('glob')
-var child_process = require('child_process')
+var childProcess = require('child_process')
 var utils = require('./utils')
 
 /**
@@ -25,7 +25,7 @@ module.exports.process = function (file, db, config, cb) {
     var base = path.basename(p)
     var info = base.replace('.pcap.zip', '').replace('.pcap', '').split('_')
 
-    if (info.length != 5) return undefined
+    if (info.length !== 5) return undefined
     return {
       basename: base,
       session_ts: parseInt(info[0]),
@@ -80,7 +80,7 @@ module.exports.process = function (file, db, config, cb) {
             // combine all parts into a single pcap file
             var cmd = 'tracemerge -Z none pcap:' + mergedfile + ' ' + files.join(' ')
             debug('merge', cmd)
-            child_process.exec(
+            childProcess.exec(
                             cmd,
                             function (err, stdout, stderr) {
                               debug(err, stdout, stderr)
@@ -128,7 +128,7 @@ module.exports.process = function (file, db, config, cb) {
                         FROM pcap p WHERE p.basename = $3;`
 
           var loop = function () {
-            if (fileinfos.length == 0) { return callback(null) }
+            if (fileinfos.length === 0) { return callback(null) }
             var item = fileinfos.shift()
 
             // find the file info
@@ -158,7 +158,7 @@ module.exports.process = function (file, db, config, cb) {
 
         function (callback) {
           // call the tcptrace python script to process the pcap file
-          child_process.exec(
+          childProcess.exec(
                         'python ' + config.tcptrace_script + ' ' + mergedfile,
             {
               cwd: path.dirname(config.tcptrace_script),
