@@ -22,7 +22,8 @@
   "scripts": {
     "debug": "node debug app.js",
     "start": "node app.js",
-    "test": "node ./node_modules/mocha/bin/mocha test/bootstrap.js test/process_pcap.test.js"
+    "test": "node ./node_modules/mocha/bin/mocha test/bootstrap.js test/process_pcap.test.js",
+    "lint": "./node_modules/.bin/standard app.js lib/*.js"
   },
   "main": "app.js",
   "author": "Anna-Kaisa Pietilainen<anna-kaisa.pietilainen@inria.fr>",
