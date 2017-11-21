@@ -102,7 +102,7 @@ DB.prototype.getOrInsertDevice = function (table, row, extra, cb) {
       }
     ], callback)
   }, function (err, res) {
-        // called upon transaction success/failure
+    // called upon transaction success/failure
     if (err) return cb(err)
     cb(undefined, res)
   })
@@ -124,7 +124,7 @@ DB.prototype.insertOrUpdateFile = function (file, cb) {
         if (res.rows.length == 1) {
           var dbfile = res.rows[0]
           if (dbfile.status === 'success') {
-                        // file exists and has been processed already !!
+            // file exists and has been processed already !!
             callback(new Error('file already processed ' + dbfile.basename))
           } else {
             var update = {
@@ -143,7 +143,7 @@ DB.prototype.insertOrUpdateFile = function (file, cb) {
       }
     ], callback)
   }, function (err, res) {
-        // called upon transaction success/failure
+    // called upon transaction success/failure
     if (err) return cb(err)
     cb(undefined, res)
   })

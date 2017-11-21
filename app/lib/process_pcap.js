@@ -19,9 +19,9 @@ var utils = require('./utils')
 module.exports.process = function (file, db, config, cb) {
   if (!file || !db || !config) { return cb(new Error('[process_pcap] missing arguments')) }
 
-    // parse file name into file info
+  // parse file name into file info
   var getinfo = function (p) {
-        // format: sessionstarttime_connectionstarttime_filenum_adapterid_[part|last].pcap.zip
+    // format: sessionstarttime_connectionstarttime_filenum_adapterid_[part|last].pcap.zip
     var base = path.basename(p)
     var info = base.replace('.pcap.zip', '').replace('.pcap', '').split('_')
 
@@ -42,15 +42,15 @@ module.exports.process = function (file, db, config, cb) {
 
   if (!finfo) { return cb(new Error('[process_pcap] invalid filename: ' + file.path)) }
 
-    // this is where the parts + tmp files live (merged files + tcptrace data)
-    // everything here is uncompressed
+  // this is where the parts + tmp files live (merged files + tcptrace data)
+  // everything here is uncompressed
   var workdir = config.pcap_dir + '/' + file.device_id
 
-    // uncompress the file to the pcap folder for processing
+  // uncompress the file to the pcap folder for processing
   utils.uncompress(file.path, workdir, function (err, fn) {
     if (err) return cb(err)
 
-        // check if we've got the last + all parts for this capture session
+    // check if we've got the last + all parts for this capture session
     var p = workdir + '/' + finfo.session_ts + '_' + finfo.conn_ts + '_*_' + finfo.adapter + '_*.pcap'
     debug('glob', p)
 
@@ -70,14 +70,14 @@ module.exports.process = function (file, db, config, cb) {
 
       if (lastfilenum < 0 || fileinfos.length < lastfilenum + 1) { return cb(null) } // missing parts, just signal this part handled for now
 
-            // all parts available - merge and process to the db
+      // all parts available - merge and process to the db
       var mergedfile = workdir + '/' + finfo.session_ts + '_' + finfo.conn_ts + '_' + finfo.adapter + '.pcap'
       debug('handle complete pcap ' + mergedfile)
 
       async.waterfall([
         function (callback) {
           if (files.length > 1) {
-                        // combine all parts into a single pcap file
+            // combine all parts into a single pcap file
             var cmd = 'tracemerge -Z none pcap:' + mergedfile + ' ' + files.join(' ')
             debug('merge', cmd)
             child_process.exec(
@@ -131,7 +131,7 @@ module.exports.process = function (file, db, config, cb) {
             if (fileinfos.length == 0) { return callback(null) }
             var item = fileinfos.shift()
 
-                        // find the file info
+            // find the file info
             db._db.select('*')
                             .from('files')
                             .where({
@@ -157,7 +157,7 @@ module.exports.process = function (file, db, config, cb) {
         },
 
         function (callback) {
-                    // call the tcptrace python script to process the pcap file
+          // call the tcptrace python script to process the pcap file
           child_process.exec(
                         'python ' + config.tcptrace_script + ' ' + mergedfile,
             {
@@ -173,7 +173,7 @@ module.exports.process = function (file, db, config, cb) {
         },
 
         function (callback) {
-                    // move the combined trace to processed_dir
+          // move the combined trace to processed_dir
           try {
             var dst = config.processed_dir + '/' + file.folder + '/' + path.basename(mergedfile)
             debug('move ' + mergedfile + ' to ' + dst)
@@ -184,7 +184,7 @@ module.exports.process = function (file, db, config, cb) {
         },
 
         function (callback) {
-                    // remove the partial files (copy is already in processed_dir)
+          // remove the partial files (copy is already in processed_dir)
           try {
             files.forEach(function (item) {
               debug('remove ' + item)
@@ -198,17 +198,17 @@ module.exports.process = function (file, db, config, cb) {
             function (err) {
               debug('process done', err)
               if (err) {
-                    // cleanup processing state
+                // cleanup processing state
                 db.delete('pcap', {basename: path.basename(mergedfile)}, function () {
                   try {
                     fs.unlinkSync(mergedfile)
                   } catch (err) {
                   }
-                        // note we leave the uncompressed parts to the workdir
+                  // note we leave the uncompressed parts to the workdir
                   cb(err)
                 })
               } else {
-                    // all good!
+                // all good!
                 cb(null)
               }
             }) // waterfall

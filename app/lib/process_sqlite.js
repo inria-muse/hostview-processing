@@ -16,11 +16,11 @@ var utils = require('./utils')
 module.exports.process = function (file, db, cb) {
   if (!file || !db) { return cb(new Error('[process_sqlite] missing arguments')) }
 
-    // wrap everything in a transaction on the backend db --
-    // any failure to write there will cancel the file processing
-    // anc call cb with error
+  // wrap everything in a transaction on the backend db --
+  // any failure to write there will cancel the file processing
+  // anc call cb with error
 
-    // the session of this file
+  // the session of this file
   var session = {
     file_id: file.id,
     device_id: file.device_id,
@@ -30,59 +30,59 @@ module.exports.process = function (file, db, cb) {
     stop_event: null
   }
 
-    // helper func to refactor out the common processing pattern
-    // (read rows from sqlite and insert to the backend fb)
+  // helper func to refactor out the common processing pattern
+  // (read rows from sqlite and insert to the backend fb)
   var readloop = function (client, sql, dsttable, dstrow, callback) {
     var e = null
 
-        // fetch data from the sqlite
+    // fetch data from the sqlite
     file.db.each(sql, function (err, row) {
       if (e || err) {
-                // we can't abort the .each(), so just record the error
-                // -- alternative is to do .all() but .each avoids reading
-                // all the data in memory (some tables can be huge !!)
+        // we can't abort the .each(), so just record the error
+        // -- alternative is to do .all() but .each avoids reading
+        // all the data in memory (some tables can be huge !!)
         if (!e) debug('readloop fail: ' + dsttable, err)
         e = e || err
         return
       }
 
-            // map from sqlite row to backend db row
+      // map from sqlite row to backend db row
       var o = dstrow(row)
 
-            // track the latest data row just in case
+      // track the latest data row just in case
       if (o.logged_at) { session.ended_at = utils.datemax(session.ended_at, o.logged_at) }
 
-            // add to the backend table
+      // add to the backend table
       client.insert(dsttable, o).run(function (err, res) {
-                // we can't abort the .each(), so just record the error
-                // -- alternative is to do .all() but .each avoids reading
-                // all the data in memory (some tables can be huge !!)
-                // TODO: does this really work or there's some race conditions here ?
+        // we can't abort the .each(), so just record the error
+        // -- alternative is to do .all() but .each avoids reading
+        // all the data in memory (some tables can be huge !!)
+        // TODO: does this really work or there's some race conditions here ?
         if (!e && err) debug('readloop insert fail: ' + dsttable, err)
         e = e || err
       })
     }, function (err) {
-            // .each() completed - pass on any error (or nothing on success)
+      // .each() completed - pass on any error (or nothing on success)
       e = e || err
       debug('readloop complete: ' + dsttable, e)
       callback(e)
     })
   }
 
-    // another helper to convert empty strings to nulls
+  // another helper to convert empty strings to nulls
   var getstr = function (row, col) {
     if (!row[col] || row[col] == '' || row[col].trim() == '') { return null }
     return row[col].trim()
   }
 
-    // the processing goes as follows:
-    //
-    //   1) uncompress the file to a temp location
-    //   2) open sqlite connection to the temp file
-    //   3) create the session on the backend db
-    //   4) bulk of the work: map sqlite tables to backend db
-    //   5) process other derived tables and data
-    //   6) cleanup temp file
+  // the processing goes as follows:
+  //
+  //   1) uncompress the file to a temp location
+  //   2) open sqlite connection to the temp file
+  //   3) create the session on the backend db
+  //   4) bulk of the work: map sqlite tables to backend db
+  //   5) process other derived tables and data
+  //   6) cleanup temp file
 
   async.waterfall([
 
@@ -99,7 +99,7 @@ module.exports.process = function (file, db, cb) {
     },
 
     function (callback) {
-            // get session start event (there should only be one)
+      // get session start event (there should only be one)
       debug('select session start')
       sql = `SELECT timestamp started_at, event start_event
                 FROM session 
@@ -111,13 +111,13 @@ module.exports.process = function (file, db, cb) {
     function (row, callback) {
       debug('session start', row)
 
-            // stop here - there's no start event so the db is (assumed?) empty
+      // stop here - there's no start event so the db is (assumed?) empty
       if (!row) return callback(new Error('no data'))
 
       session.started_at = new Date(row.started_at)
       session.start_event = row.start_event
 
-            // get session end event (there should only be zero or one)
+      // get session end event (there should only be zero or one)
       sql = `SELECT timestamp ended_at, event stop_event
                 FROM session 
                 WHERE event IN ('pause','stop','autostop','suspend')
@@ -131,12 +131,12 @@ module.exports.process = function (file, db, cb) {
         session.ended_at = new Date(row.ended_at)
         session.stop_event = row.stop_event
       } else {
-                // can happen if the hostview cli crashed
+        // can happen if the hostview cli crashed
         session.stop_event = 'missing'
         session.ended_at = session.started_at
       }
 
-            // store the session, returns the inserted row
+      // store the session, returns the inserted row
       db._db.insert('sessions', session).returning('*').row(callback)
     },
 
@@ -315,7 +315,7 @@ module.exports.process = function (file, db, cb) {
           e = e || err
         })
       }, function (err) {
-                // .each complete
+        // .each complete
         e = e || err
         callback(e)
       })
@@ -357,7 +357,7 @@ module.exports.process = function (file, db, cb) {
     function (callback) {
       debug('activity')
 
-            // reading one ahead so we can log the finish as well
+      // reading one ahead so we can log the finish as well
       var prev
       var rows = []
       var e = null
@@ -383,16 +383,16 @@ module.exports.process = function (file, db, cb) {
         session.ended_at = utils.datemax(session.ended_at, o.logged_at)
 
         if (prev) {
-                    // ends when the new event happens
+          // ends when the new event happens
           prev.finished_at = new Date(row.timestamp)
           rows.push(prev)
         }
         prev = o
       }, function (err) {
-                // .each complete
+        // .each complete
         e = e || err
         if (prev) {
-                    // insert the last activity event
+          // insert the last activity event
           prev.finished_at = session.ended_at
           rows.push(prev)
         }
@@ -400,7 +400,7 @@ module.exports.process = function (file, db, cb) {
         debug('activies read, found ' + rows.length, e)
         if (e) return callback(e) // something failed during .each
 
-                // now add all rows
+        // now add all rows
         var loop = function () {
           if (rows.length == 0) return callback(null) // done
           var a = rows.shift()
@@ -419,8 +419,8 @@ module.exports.process = function (file, db, cb) {
     function (res, callback) {
       debug('connectivity')
 
-            // FIXME:: this is really slow on sqlite - there's no indexes
-            // or nothing so takes forever, do as with activity !!!
+      // FIXME:: this is really slow on sqlite - there's no indexes
+      // or nothing so takes forever, do as with activity !!!
 
       var e = null
       var sql = `SELECT 
@@ -485,7 +485,7 @@ module.exports.process = function (file, db, cb) {
         }
 
         if (row.public_ip) {
-                    // insert/get the location first
+          // insert/get the location first
           var l = {
             public_ip: getstr(row, 'public_ip'),
             reverse_dns: getstr(row, 'reverse_dns'),
@@ -556,7 +556,7 @@ module.exports.process = function (file, db, cb) {
           e = e || err
         })
       }, function (err) {
-                // .each complete
+        // .each complete
         e = e || err
         callback(e)
       })
@@ -627,7 +627,7 @@ module.exports.process = function (file, db, cb) {
           e = e || err
         })
       }, function (err) {
-                // .each complete
+        // .each complete
         e = e || err
         callback(e)
       })
@@ -737,7 +737,7 @@ module.exports.process = function (file, db, cb) {
         */
   ],
     function (err) {
-        // if we receive error here, something went wrong above ...
+      // if we receive error here, something went wrong above ...
       async.waterfall([
         function (callback) {
           if (err) {
@@ -758,7 +758,7 @@ module.exports.process = function (file, db, cb) {
             { fs.unlink(file.uncompressed_path, function () { callback(null) }) } else { callback(null) }
         }
       ], function () {
-            // return the original error (if any)
+        // return the original error (if any)
         return cb(err)
       }) // cleanup waterfall
     }) // main watefall
