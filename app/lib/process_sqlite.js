@@ -1,11 +1,11 @@
 /**
  * process_sqlite.js
  */
-var fs = require('fs-extra'),
-  debug = require('debug')('hostview'),
-  async = require('async'),
-  sqlite = require('sqlite3'),
-  utils = require('./utils')
+var fs = require('fs-extra')
+var debug = require('debug')('hostview')
+var async = require('async')
+var sqlite = require('sqlite3')
+var utils = require('./utils')
 
 /**
  *  Process a single sqlite file from Hostview.

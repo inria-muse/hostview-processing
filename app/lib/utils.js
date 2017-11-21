@@ -3,9 +3,9 @@
  *
  * Common helper functions.
  */
-var fs = require('fs-extra'),
-  child_process = require('child_process'),
-  path = require('path')
+var fs = require('fs-extra')
+var child_process = require('child_process')
+var path = require('path')
 
 /**
  * Uncompress the given src archive file to dst folder.

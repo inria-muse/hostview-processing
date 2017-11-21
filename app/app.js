@@ -4,19 +4,18 @@
  * To start the processing cluster, run: `node app.js`.
  *
  */
+var kue = require('kue')
+var debug = require('debug')('hostview')
+var cluster = require('cluster')
+var fs = require('fs-extra')
+var path = require('path')
+var chokidar = require('chokidar')
+var sqldb = require('./lib/sqldb')
+var process_sqlite = require('./lib/process_sqlite')
+var process_pcap = require('./lib/process_pcap')
+var process_json = require('./lib/process_json')
 
-var kue = require('kue'),
-  debug = require('debug')('hostview'),
-  cluster = require('cluster'),
-  fs = require('fs-extra'),
-  path = require('path'),
-  chokidar = require('chokidar'),
-  sqldb = require('./lib/sqldb'),
-  process_sqlite = require('./lib/process_sqlite'),
-  process_pcap = require('./lib/process_pcap'),
-  process_json = require('./lib/process_json');
-
-(function () {
+;(function () {
   // return boolean environment value or default if not defined
   var getbool = function (key, defaultv) {
     var string = process.env[key] || ''

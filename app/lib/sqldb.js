@@ -3,8 +3,8 @@
  *
  * DB interface.
  */
-var pgb = require('pg-bricks'),
-  async = require('async')
+var pgb = require('pg-bricks')
+var async = require('async')
 
 /** Constructor */
 var DB = function (dburl) {
