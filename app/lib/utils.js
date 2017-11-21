@@ -3,42 +3,42 @@
  *
  * Common helper functions.
  */
-var fs = require('fs-extra')
-    , child_process = require('child_process')
-    , path = require("path");
+var fs = require('fs-extra'),
+  child_process = require('child_process'),
+  path = require('path')
 
-/** 
- * Uncompress the given src archive file to dst folder. 
+/**
+ * Uncompress the given src archive file to dst folder.
  *
- * Returns the name of the uncomressed file (caller is responsible 
- * for cleaning it up eventually). 
+ * Returns the name of the uncomressed file (caller is responsible
+ * for cleaning it up eventually).
  */
-module.exports.uncompress = function(src, dst, cb) {
-    try {
-        fs.ensureDirSync(dst);
+module.exports.uncompress = function (src, dst, cb) {
+  try {
+    fs.ensureDirSync(dst)
 
-        child_process.exec(
-            "dtrx -q -n -f " + src,
+    child_process.exec(
+            'dtrx -q -n -f ' + src,
             { cwd: dst },
-            function(err, stdout, stderr) {
-                if (err) return cb(err);
-                return cb(undefined, path.join(dst,path.basename(src).replace('.zip','')));
-            });
-    } catch (err) {
-        cb(err, undefined);
-    }        
+            function (err, stdout, stderr) {
+              if (err) return cb(err)
+              return cb(undefined, path.join(dst, path.basename(src).replace('.zip', '')))
+            })
+  } catch (err) {
+    cb(err, undefined)
+  }
 }
 
 /** Return max of the two dates. */
-module.exports.datemax = function(a,b) {
-    if (!b) return a;
-    if (!a) return b;
-    return (a.getTime()>=b.getTime() ? a : b);
+module.exports.datemax = function (a, b) {
+  if (!b) return a
+  if (!a) return b
+  return (a.getTime() >= b.getTime() ? a : b)
 }
 
 /** Return max of the two dates. */
-module.exports.datemin = function(a,b) {
-    if (!b) return a;
-    if (!a) return b;
-    return (a.getTime()<=b.getTime() ? a : b);
+module.exports.datemin = function (a, b) {
+  if (!b) return a
+  if (!a) return b
+  return (a.getTime() <= b.getTime() ? a : b)
 }
