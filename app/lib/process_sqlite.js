@@ -71,7 +71,7 @@ module.exports.process = function (file, db, cb) {
 
   // another helper to convert empty strings to nulls
   var getstr = function (row, col) {
-    if (!row[col] || row[col] == '' || row[col].trim() == '') { return null }
+    if (!row[col] || row[col] === '' || row[col].trim() === '') { return null }
     return row[col].trim()
   }
 
@@ -402,7 +402,7 @@ module.exports.process = function (file, db, cb) {
 
         // now add all rows
         var loop = function () {
-          if (rows.length == 0) return callback(null) // done
+          if (rows.length === 0) return callback(null) // done
           var a = rows.shift()
           db._db.insert('activities', a).run(function (err, res) {
             if (err) return callback(err)
@@ -500,7 +500,7 @@ module.exports.process = function (file, db, cb) {
           db._db.select('*').from('locations')
                         .where(l).rows(function (err, rows) {
                           if (err) return callback(err)
-                          if (rows.length == 0) {
+                          if (rows.length === 0) {
                             db._db.insert(table, row).returning('*').row(function (err, res) {
                               if (err) return callback(err)
                               doconn(res.id)
