@@ -74,14 +74,14 @@ DB.prototype.getOrInsert = function (table, row, cb) {
           client.insert(table, row).returning('*').row(callback)
         } else {
           row.id = res.rows[0].id
-          callback(undefined, row)
+          callback(null, row)
         }
       }
     ], callback)
   }, function (err, res) {
         // called upon transaction success/failure
     if (err) return cb(err)
-    cb(undefined, res)
+    cb(null, res)
   })
 }
 
@@ -97,14 +97,14 @@ DB.prototype.getOrInsertDevice = function (table, row, extra, cb) {
           client.insert(table, row2).returning('*').row(callback)
         } else {
           row.id = res.rows[0].id
-          callback(undefined, row)
+          callback(null, row)
         }
       }
     ], callback)
   }, function (err, res) {
     // called upon transaction success/failure
     if (err) return cb(err)
-    cb(undefined, res)
+    cb(null, res)
   })
 }
 
@@ -145,7 +145,7 @@ DB.prototype.insertOrUpdateFile = function (file, cb) {
   }, function (err, res) {
     // called upon transaction success/failure
     if (err) return cb(err)
-    cb(undefined, res)
+    cb(null, res)
   })
 }
 

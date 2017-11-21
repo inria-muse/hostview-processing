@@ -22,7 +22,7 @@ module.exports.uncompress = function (src, dst, cb) {
             { cwd: dst },
             function (err, stdout, stderr) {
               if (err) return cb(err)
-              return cb(undefined, path.join(dst, path.basename(src).replace('.zip', '')))
+              return cb(null, path.join(dst, path.basename(src).replace('.zip', '')))
             })
   } catch (err) {
     cb(err, undefined)
