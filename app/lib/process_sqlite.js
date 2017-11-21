@@ -101,7 +101,7 @@ module.exports.process = function (file, db, cb) {
     function (callback) {
       // get session start event (there should only be one)
       debug('select session start')
-      sql = `SELECT timestamp started_at, event start_event
+      var sql = `SELECT timestamp started_at, event start_event
                 FROM session 
                 WHERE event IN ('start','restart','autorestart','resume','autostart')
                 ORDER BY timestamp ASC`
@@ -118,7 +118,7 @@ module.exports.process = function (file, db, cb) {
       session.start_event = row.start_event
 
       // get session end event (there should only be zero or one)
-      sql = `SELECT timestamp ended_at, event stop_event
+      var sql = `SELECT timestamp ended_at, event stop_event
                 FROM session 
                 WHERE event IN ('pause','stop','autostop','suspend')
                 ORDER BY timestamp DESC`
