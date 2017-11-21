@@ -4,7 +4,7 @@
  * Common helper functions.
  */
 var fs = require('fs-extra')
-var child_process = require('child_process')
+var childProcess = require('child_process')
 var path = require('path')
 
 /**
@@ -17,7 +17,7 @@ module.exports.uncompress = function (src, dst, cb) {
   try {
     fs.ensureDirSync(dst)
 
-    child_process.exec(
+    childProcess.exec(
             'dtrx -q -n -f ' + src,
             { cwd: dst },
             function (err, stdout, stderr) {
