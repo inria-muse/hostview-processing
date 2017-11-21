@@ -70,7 +70,7 @@ DB.prototype.getOrInsert = function (table, row, cb) {
     async.waterfall([
       client.select('*').from(table).where(row).run,
       function (res, callback) {
-        if (res.rows.length == 0) {
+        if (res.rows.length === 0) {
           client.insert(table, row).returning('*').row(callback)
         } else {
           row.id = res.rows[0].id
@@ -92,8 +92,8 @@ DB.prototype.getOrInsertDevice = function (table, row, extra, cb) {
     async.waterfall([
       client.select('*').from(table).where(row).run,
       function (res, callback) {
-        if (res.rows.length == 0) {
-          var row2 = { device_id: row.device_id, secret_token: extra}
+        if (res.rows.length === 0) {
+          var row2 = { device_id: row.device_id, secret_token: extra }
           client.insert(table, row2).returning('*').row(callback)
         } else {
           row.id = res.rows[0].id
@@ -121,7 +121,7 @@ DB.prototype.insertOrUpdateFile = function (file, cb) {
     async.waterfall([
       client.select('*').from('files').where(filter).run,
       function (res, callback) {
-        if (res.rows.length == 1) {
+        if (res.rows.length === 1) {
           var dbfile = res.rows[0]
           if (dbfile.status === 'success') {
             // file exists and has been processed already !!
