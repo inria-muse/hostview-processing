@@ -11,9 +11,9 @@ var fs = require('fs-extra')
 var path = require('path')
 var chokidar = require('chokidar')
 var sqldb = require('./lib/sqldb')
-var process_sqlite = require('./lib/process_sqlite')
-var process_pcap = require('./lib/process_pcap')
-var process_json = require('./lib/process_json')
+var processSqlite = require('./lib/process_sqlite')
+var processPcap = require('./lib/process_pcap')
+var processJson = require('./lib/process_json')
 
 ;(function () {
   // return boolean environment value or default if not defined
@@ -157,9 +157,9 @@ var process_json = require('./lib/process_json')
       debug('Master: ', JSON.stringify(task, null, 2))
 
       var prio = 'normal'
-      if (task.filetype == 'sqlite') {
+      if (task.filetype === 'sqlite') {
         prio = 'critical' // so that sessions get added asap
-      } else if (task.filetype == 'pcap') {
+      } else if (task.filetype === 'pcap') {
         prio = 'low'
       }
 
@@ -216,13 +216,13 @@ var process_json = require('./lib/process_json')
       }
 
       // extract Hostview id and version from the filepath
-      var device_id = p[p.length - 4]
+      var deviceId = p[p.length - 4]
       var hv = p[p.length - 3]
 
       // make sure the device is recorded in the db and get its id
-      db.getOrInsert('devices', { device_id: device_id }, function (err, dev) {
+      db.getOrInsert('devices', { device_id: deviceId }, function (err, dev) {
         if (err) {
-          debug('Worker: %d', process.pid, ' Error inserting the device ', device_id, ' into the DB: ', err)
+          debug('Worker: %d', process.pid, ' Error inserting the device ', deviceId, ' into the DB: ', err)
           return done(err)
         } else {
           debug('Worker: %d', process.pid, ' Got/Inserted device')
@@ -271,15 +271,15 @@ var process_json = require('./lib/process_json')
 
           try {
             // finally, process the file
-            if (job.data.filetype == 'sqlite') {
+            if (job.data.filetype === 'sqlite') {
               console.log('process_sqlite')
-              process_sqlite.process(file, db, processdone)
-            } else if (job.data.filetype == 'pcap') {
+              processSqlite.process(file, db, processdone)
+            } else if (job.data.filetype === 'pcap') {
               console.log('process_pcap')
-              process_pcap.process(file, db, config, processdone)
-            } else if (job.data.filetype == 'json') {
+              processPcap.process(file, db, config, processdone)
+            } else if (job.data.filetype === 'json') {
               console.log('process_json')
-              process_json.process(file, db, processdone)
+              processJson.process(file, db, processdone)
             } else {
               // 'other', just signal success (gets moved to the processed folder)
               console.log('process_dummy')
