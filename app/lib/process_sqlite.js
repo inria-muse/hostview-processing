@@ -750,12 +750,14 @@ module.exports.process = function (file, db, cb) {
           }
         },
         function (res, callback) {
-          if (file.db) // sqlite conn
-            { file.db.close(function () { callback(null) }) } else { callback(null) }
+          if (file.db) { // sqlite conn
+            file.db.close(function () { callback(null) })
+          } else { callback(null) }
         },
         function (callback) {
-          if (file.uncompressed_path) // tmp file
-            { fs.unlink(file.uncompressed_path, function () { callback(null) }) } else { callback(null) }
+          if (file.uncompressed_path) { // tmp file
+            fs.unlink(file.uncompressed_path, function () { callback(null) })
+          } else { callback(null) }
         }
       ], function () {
         // return the original error (if any)
