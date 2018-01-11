@@ -5,23 +5,25 @@
   "description": "Process raw data file uploads from Hostview clients.",
   "keywords": [],
   "dependencies": {
-    "fs-extra": "~0.30.0",
-    "kue": "~0.11.1",
-    "chokidar": "~1.6.0",
-    "pg-bricks": "~0.4.0",
-    "sqlite3": "~3.1.4",
     "async": "~1.5.2",
+    "chokidar": "~1.6.0",
+    "debug": "~2.2.0",
+    "fs-extra": "~0.30.0",
     "glob": "~7.0.5",
-    "debug": "~2.2.0"
+    "kue": "~0.11.1",
+    "pg-bricks": "~0.4.0",
+    "sqlite3": "~3.1.4"
   },
   "devDependencies": {
+    "chai": "~3.5.0",
     "mocha": "~2.5.3",
-    "chai" : "~3.5.0" 
+    "standard": "^10.0.3"
   },
   "scripts": {
     "debug": "node debug app.js",
     "start": "node app.js",
-    "test": "node ./node_modules/mocha/bin/mocha test/bootstrap.js test/process_pcap.test.js"
+    "test": "node ./node_modules/mocha/bin/mocha test/bootstrap.js test/process_pcap.test.js",
+    "lint": "./node_modules/.bin/standard app.js lib/*.js"
   },
   "main": "app.js",
   "author": "Anna-Kaisa Pietilainen<anna-kaisa.pietilainen@inria.fr>",
