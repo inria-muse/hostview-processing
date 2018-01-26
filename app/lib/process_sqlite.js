@@ -497,11 +497,13 @@ module.exports.process = function (file, db, cb) {
             longitude: getstr(row, 'lon')
           }
 
-          db._db.select('*').from('locations')
+          var locations = 'locations'
+
+          db._db.select('*').from(locations)
                         .where(l).rows(function (err, rows) {
                           if (err) return callback(err)
                           if (rows.length === 0) {
-                            db._db.insert(table, row).returning('*').row(function (err, res) {
+                            db._db.insert(locations, row).returning('*').row(function (err, res) {
                               if (err) return callback(err)
                               doconn(res.id)
                             })
