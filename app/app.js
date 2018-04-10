@@ -177,9 +177,14 @@ var processJson = require('./lib/process_json')
     // this will first scan the incoming folder and then start
     // watching for new files (or just waits for the processing to finish
     // if watcher is disabled)
+    // it waits 60 seconds from when the file appears before processing it
+    // todo:(?) we should start the processing the moment the upload is completed
     monitor = chokidar.watch(config.incoming_dir, {
       persistent: config.enable_watch,
-      alwaysStat: true
+      alwaysStat: true,
+      awaitWriteFinish: {
+      stabilityThreshold: 60*1000
+      }
     })
 
     monitor.on('add', function (path, stats) {
