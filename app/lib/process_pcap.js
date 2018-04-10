@@ -78,7 +78,7 @@ module.exports.process = function (file, db, config, cb) {
         function (callback) {
           if (files.length > 1) {
             // combine all parts into a single pcap file
-            var cmd = 'tracemerge -Z none pcap:' + mergedfile + ' ' + files.join(' ')
+            var cmd = 'tracemerge -Z none pcapfile:' + mergedfile + ' ' + files.join(' ')
             debug('merge', cmd)
             childProcess.exec(
                             cmd,
