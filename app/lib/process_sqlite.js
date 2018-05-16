@@ -341,18 +341,11 @@ module.exports.process = function (file, db, cb) {
       debug('esm activity')
       
       if (!survey_session) {
-        debug("survey_session is still null");
-        //callback(survey_session)
+        callback("cannot fill survey info because survey_session is empty (esm activity)" ) //what should we do here?
       }else{
           for (var elem in survey_session)
             debug('survey_session ' + elem)
-        //TODO use the ids in survey_session instead of running a select on the db to get the surveys id. In this way, if by bad luck we have to surveys (from different users) with the same starting time we won't make any mistake. We should do the same with all the other information that require to get ids by starting time.
       }
-    
-      var isql = `INSERT INTO survey_activity_tags(
-                survey_id, process_name, process_desc, tags)
-                SELECT s.id,$1,$2,$3
-                FROM surveys s WHERE s.started_at = $4;`
 
       var e = null
       var sql = `SELECT * FROM esm_activity_tags ORDER BY timestamp ASC`
@@ -362,30 +355,34 @@ module.exports.process = function (file, db, cb) {
           return
         };
 
-        var params = [
-          row.appname,
-          row.description,
-          row.tags.split(','),
-          new Date(row.timestamp)
-        ]
-        db._db.raw(isql, params).run(function (err, res) {
-          e = e || err
-        })
+        var surveyId = survey_session[new Date(row.timestamp)]
+        if (surveyId == null){
+                   debug ('something is wrong, we couldn\'t find a survey with the same start time') //keep trying with the other elements; todo we should report the failure somewhere
+        }else{
+            debug('find the corresponding survery with id ' + surveyId)
+            
+            var params = {
+                survey_id : surveyId,
+                process_name : row.appname,
+                process_desc : row.description,
+                tags : row.tags.split(',')
+            }
+            db._db.insert('survey_activity_tags', params).run(function (err, res) {
+              e = e || err
+        })}
       }, function (err) {
         // .each complete
         e = e || err
-        callback(e)
+        callback(e, survey_session)
       })
     },
 
     
-    function (callback) {
+    function (survey_session, callback) {
       debug('esm problems')
-
-      var isql = `INSERT INTO survey_problem_tags(
-                survey_id, process_name, process_desc, tags)
-                SELECT s.id,$1,$2,$3
-                FROM surveys s WHERE s.started_at = $4;`
+      if (!survey_session) {
+        callback("cannot fill survey info because survey_session is empty (esm problems)") //what should we do here?
+      }
 
       var e = null
       var sql = `SELECT * FROM esm_problem_tags ORDER BY timestamp ASC`
@@ -394,32 +391,33 @@ module.exports.process = function (file, db, cb) {
           e = e || err
           return
         };
-
-        var params = [
-          row.appname,
-          row.description,
-          row.tags.split(','),
-          new Date(row.timestamp)
-        ]
-        
-        db._db.raw(isql, params).run(function (err, res) {
+                
+        var surveyId = survey_session[new Date(row.timestamp)]
+        if (surveyId == null){
+            debug ('something is wrong, we couldn\'t find a survey with the same start time') //keep trying with the other elements; todo we should report the failure somewhere
+        }else{
+          var params = {
+            survey_id : surveyId,
+            process_name : row.appname,
+            process_desc : row.description,
+            tags : row.tags.split(',')
+          }
+        db._db.insert('survey_problem_tags', params).run(function (err, res) {
           e = e || err
-        })
+        })}
       }, function (err) {
                 // .each complete
         e = e || err
-        callback(e)
+        callback(e,survey_session)
       })
     },
 
                    
-    function (callback) {
+    function (survey_session, callback) {
       debug('esm activity qoe')
-                   
-      var isql = `INSERT INTO survey_activity_qoe(
-                   survey_id, process_name, process_desc, qoe)
-                   SELECT s.id,$1,$2,$3
-                   FROM surveys s WHERE s.started_at = $4;`
+      if (!survey_session) {
+        callback("cannot fill survey info because survey_session is empty (esm activity qoe)") //what should we do here?
+      }
                    
       var e = null
       var sql = `SELECT * FROM esm_activity_qoe ORDER BY timestamp ASC`
@@ -428,31 +426,33 @@ module.exports.process = function (file, db, cb) {
           e = e || err
           return
         };
-                                
-        var params = [
-              row.appname,
-              row.description,
-              row.qoe,
-              new Date(row.timestamp)
-        ]
-                                
-        db._db.raw(isql, params).run(function (err, res) {
+              
+        var surveyId = survey_session[new Date(row.timestamp)]
+        if (surveyId == null){
+            debug ('something is wrong, we couldn\'t find a survey with the same start time') //keep trying with the other elements; todo we should report the failure somewhere
+        }else{
+          var params = {
+            survey_id : surveyId,
+            process_name : row.appname,
+            process_desc : row.description,
+            qoe : row.qoe
+        }
+                
+        db._db.insert('survey_activity_qoe', params).run(function (err, res) {
           e = e || err
-        })
+        })}
       }, function (err) {
       // .each complete
         e = e || err
-        callback(e)
+        callback(e,survey_session)
       })
     },
                    
-    function (callback) {
+    function (survey_session, callback) {
         debug('esm activity importance')
-                   
-        var isql = `INSERT INTO survey_activity_importance(
-                   survey_id, process_name, process_desc, importance)
-                   SELECT s.id,$1,$2,$3
-                   FROM surveys s WHERE s.started_at = $4;`
+        if (!survey_session) {
+          callback("cannot fill survey info because survey_session is empty (esm activity importance)") //what should we do here?
+        }
                    
         var e = null
         var sql = `SELECT * FROM esm_activity_importance ORDER BY timestamp ASC`
@@ -461,23 +461,25 @@ module.exports.process = function (file, db, cb) {
                 e = e || err
                 return
             };
-                     
-            var params = [
-                row.appname,
-                row.description,
-                row.importance,
-                new Date(row.timestamp)
-            ]
-                     
-            db._db.raw(isql, params).run(function (err, res) {
-            e = e || err
-        })
+            var surveyId = survey_session[new Date(row.timestamp)]
+            if (surveyId == null){
+                debug ('something is wrong, we couldn\'t find a survey with the same start time') //keep trying with the other elements; todo we should report the failure somewhere
+            }else{
+                var params = {
+                  survey_id : surveyId,
+                  process_name : row.appname,
+                  process_desc : row.description,
+                  importance : row.importance
+                }
+              db._db.insert('survey_activity_importance', params).run(function (err, res) {
+              e = e || err
+          })}
         }, function (err) {
             // .each complete
             e = e || err
             callback(e)
         })
-                   },
+    },
 
                    
     function (callback) {
