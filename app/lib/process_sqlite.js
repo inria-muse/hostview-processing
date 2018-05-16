@@ -30,6 +30,52 @@ module.exports.process = function (file, db, cb) {
     stop_event: null
   }
 
+    
+    var readloopESM = function (client, sql, dsttable, dstrow, callback) {
+        var e = null
+        
+        var survey_session = {}
+        var elementsToInsert = []
+        
+        var loop = function () {
+        if (elementsToInsert.length === 0) {
+                return callback(null,survey_session) // done
+            }
+            var a = elementsToInsert.shift()
+            db._db.insert(dsttable, a).returning('*').row(function (err, res) {
+                if (err) return callback(err)
+                else {
+                    survey_session[res.started_at] = res.id
+                    loop()
+                }
+            })
+
+        }
+        file.db.each(sql, function (err, row) {
+                if (e || err) {
+                     // we can't abort the .each(), so just record the error
+                     // -- alternative is to do .all() but .each avoids reading
+                     // all the data in memory (some tables can be huge !!)
+                     if (!e) debug('readloopESM fail: ' + dsttable, err)
+                     e = e || err
+                     return
+                }
+                     
+                     // map from sqlite row to backend db row
+                     var o = dstrow(row)
+                     
+                     // track the latest data row just in case
+                     if (o.logged_at) { session.ended_at = utils.datemax(session.ended_at, o.logged_at) }
+                     elementsToInsert.push(o)
+
+                     
+            }, function (err) {
+                e = e || err
+                loop()
+            })
+    
+    }
+    
   // helper func to refactor out the common processing pattern
   // (read rows from sqlite and insert to the backend fb)
   var readloop = function (client, sql, dsttable, dstrow, callback) {
@@ -275,8 +321,11 @@ module.exports.process = function (file, db, cb) {
 
     function (callback) {
       debug('esm')
+
+                   
       var sql = `SELECT * FROM esm ORDER BY timestamp ASC`
-      readloop(db._db, sql, 'surveys', function (row) {
+      
+      readloopESM(db._db, sql, 'surveys', function (row) {
         return {
           session_id: session.id,
           ondemand: row.ondemand,
@@ -288,9 +337,18 @@ module.exports.process = function (file, db, cb) {
       }, callback)
     },
 
-    function (callback) {
+    function (survey_session, callback) {
       debug('esm activity')
-
+      
+      if (!survey_session) {
+        debug("survey_session is still null");
+        //callback(survey_session)
+      }else{
+          for (var elem in survey_session)
+            debug('survey_session ' + elem)
+        //TODO use the ids in survey_session instead of running a select on the db to get the surveys id. In this way, if by bad luck we have to surveys (from different users) with the same starting time we won't make any mistake. We should do the same with all the other information that require to get ids by starting time.
+      }
+    
       var isql = `INSERT INTO survey_activity_tags(
                 survey_id, process_name, process_desc, tags)
                 SELECT s.id,$1,$2,$3
@@ -310,7 +368,6 @@ module.exports.process = function (file, db, cb) {
           row.tags.split(','),
           new Date(row.timestamp)
         ]
-
         db._db.raw(isql, params).run(function (err, res) {
           e = e || err
         })
@@ -321,6 +378,7 @@ module.exports.process = function (file, db, cb) {
       })
     },
 
+    
     function (callback) {
       debug('esm problems')
 
@@ -343,7 +401,7 @@ module.exports.process = function (file, db, cb) {
           row.tags.split(','),
           new Date(row.timestamp)
         ]
-
+        
         db._db.raw(isql, params).run(function (err, res) {
           e = e || err
         })
@@ -354,6 +412,74 @@ module.exports.process = function (file, db, cb) {
       })
     },
 
+                   
+    function (callback) {
+      debug('esm activity qoe')
+                   
+      var isql = `INSERT INTO survey_activity_qoe(
+                   survey_id, process_name, process_desc, qoe)
+                   SELECT s.id,$1,$2,$3
+                   FROM surveys s WHERE s.started_at = $4;`
+                   
+      var e = null
+      var sql = `SELECT * FROM esm_activity_qoe ORDER BY timestamp ASC`
+      file.db.each(sql, function (err, row) {
+        if (e || err) {
+          e = e || err
+          return
+        };
+                                
+        var params = [
+              row.appname,
+              row.description,
+              row.qoe,
+              new Date(row.timestamp)
+        ]
+                                
+        db._db.raw(isql, params).run(function (err, res) {
+          e = e || err
+        })
+      }, function (err) {
+      // .each complete
+        e = e || err
+        callback(e)
+      })
+    },
+                   
+    function (callback) {
+        debug('esm activity importance')
+                   
+        var isql = `INSERT INTO survey_activity_importance(
+                   survey_id, process_name, process_desc, importance)
+                   SELECT s.id,$1,$2,$3
+                   FROM surveys s WHERE s.started_at = $4;`
+                   
+        var e = null
+        var sql = `SELECT * FROM esm_activity_importance ORDER BY timestamp ASC`
+        file.db.each(sql, function (err, row) {
+            if (e || err) {
+                e = e || err
+                return
+            };
+                     
+            var params = [
+                row.appname,
+                row.description,
+                row.importance,
+                new Date(row.timestamp)
+            ]
+                     
+            db._db.raw(isql, params).run(function (err, res) {
+            e = e || err
+        })
+        }, function (err) {
+            // .each complete
+            e = e || err
+            callback(e)
+        })
+                   },
+
+                   
     function (callback) {
       debug('activity')
 

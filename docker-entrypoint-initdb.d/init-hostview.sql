@@ -959,6 +959,79 @@ ALTER SEQUENCE survey_activity_tags_id_seq OWNED BY survey_activity_tags.id;
 
 
 --
+-- Name: survey_activity_qoe; Type: TABLE; Schema: public; Owner: hostview; Tablespace: 
+--
+
+CREATE TABLE survey_activity_qoe (
+    id bigint NOT NULL,
+    survey_id bigint NOT NULL,
+    process_name character varying(260),
+    process_desc character varying(260),
+    qoe character varying(260)
+);
+
+
+ALTER TABLE public.survey_activity_qoe OWNER TO hostview;
+
+--
+-- Name: survey_activity_qoe_id_seq; Type: SEQUENCE; Schema: public; Owner: hostview
+--
+
+CREATE SEQUENCE survey_activity_qoe_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER TABLE public.survey_activity_qoe_id_seq OWNER TO hostview;
+
+--
+-- Name: survey_activity_qoe_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: hostview
+--
+
+ALTER SEQUENCE survey_activity_qoe_id_seq OWNED BY survey_activity_qoe.id;
+
+
+--
+-- Name: survey_activity_importance; Type: TABLE; Schema: public; Owner: hostview; Tablespace: 
+--
+
+CREATE TABLE survey_activity_importance (
+    id bigint NOT NULL,
+    survey_id bigint NOT NULL,
+    process_name character varying(260),
+    process_desc character varying(260),
+    importance character varying(260)
+);
+
+
+ALTER TABLE public.survey_activity_importance OWNER TO hostview;
+
+--
+-- Name: survey_activity_importance_id_seq; Type: SEQUENCE; Schema: public; Owner: hostview
+--
+
+CREATE SEQUENCE survey_activity_importance_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER TABLE public.survey_activity_importance_id_seq OWNER TO hostview;
+
+--
+-- Name: survey_activity_importance_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: hostview
+--
+
+ALTER SEQUENCE survey_activity_importance_id_seq OWNED BY survey_activity_importance.id;
+
+
+
+--
 -- Name: surveys; Type: TABLE; Schema: public; Owner: hostview; Tablespace: 
 --
 
@@ -1978,6 +2051,18 @@ ALTER TABLE ONLY survey_activity_tags ALTER COLUMN id SET DEFAULT nextval('surve
 -- Name: id; Type: DEFAULT; Schema: public; Owner: hostview
 --
 
+ALTER TABLE ONLY survey_activity_qoe ALTER COLUMN id SET DEFAULT nextval('survey_activity_qoe_id_seq'::regclass);
+
+--
+-- Name: id; Type: DEFAULT; Schema: public; Owner: hostview
+--
+
+ALTER TABLE ONLY survey_activity_importance ALTER COLUMN id SET DEFAULT nextval('survey_activity_importance_id_seq'::regclass);
+
+--
+-- Name: id; Type: DEFAULT; Schema: public; Owner: hostview
+--
+
 ALTER TABLE ONLY surveys ALTER COLUMN id SET DEFAULT nextval('surveys_id_seq'::regclass);
 
 
@@ -2241,6 +2326,21 @@ ALTER TABLE ONLY survey_problem_tags
 ALTER TABLE ONLY survey_activity_tags
     ADD CONSTRAINT survey_activity_tags_pkey PRIMARY KEY (id);
 
+
+--
+-- Name: survey_activity_qoe_pkey; Type: CONSTRAINT; Schema: public; Owner: hostview; Tablespace: 
+--
+
+ALTER TABLE ONLY survey_activity_qoe
+    ADD CONSTRAINT survey_activity_qoe_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: survey_activity_importance_pkey; Type: CONSTRAINT; Schema: public; Owner: hostview; Tablespace: 
+--
+
+ALTER TABLE ONLY survey_activity_importance
+    ADD CONSTRAINT survey_activity_importance_pkey PRIMARY KEY (id);
 
 --
 -- Name: surveys_pkey; Type: CONSTRAINT; Schema: public; Owner: hostview; Tablespace: 
@@ -2808,7 +2908,7 @@ ALTER TABLE ONLY dns_logs
 --
 
 ALTER TABLE ONLY files
-    ADD CONSTRAINT files_device_id_fkey FOREIGN KEY (device_id) REFERENCES devices(id);
+    ADD CONSTRAINT files_device_id_fkey FOREIGN KEY (device_id) REFERENCES devices(id) ON DELETE CASCADE;
 
 
 --
@@ -2987,6 +3087,21 @@ ALTER TABLE ONLY survey_activity_tags
     ADD CONSTRAINT survey_activity_tags_survey_id_fkey FOREIGN KEY (survey_id) REFERENCES surveys(id) ON DELETE CASCADE;
 
 --
+-- Name: survey_purpose_qoe_survey_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: hostview
+--
+
+ALTER TABLE ONLY survey_activity_qoe
+    ADD CONSTRAINT survey_activity_qoe_survey_id_fkey FOREIGN KEY (survey_id) REFERENCES surveys(id) ON DELETE CASCADE;
+
+--
+-- Name: survey_purpose_importance_survey_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: hostview
+--
+
+ALTER TABLE ONLY survey_activity_importance
+    ADD CONSTRAINT survey_activity_importance_survey_id_fkey FOREIGN KEY (survey_id) REFERENCES surveys(id) ON DELETE CASCADE;
+
+
+--
 -- Name: surveys_session_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: hostview
 --
 
@@ -3097,6 +3212,8 @@ ALTER TABLE ONLY video_session
 ALTER TABLE ONLY wifi_stats
     ADD CONSTRAINT wifi_stats_session_id_fkey FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE;
 
+
+CREATE OR REPLACE VIEW users_sessions AS SELECT distinct user_name, session_id FROM activities;
 
 --
 -- Name: public; Type: ACL; Schema: -; Owner: postgres
